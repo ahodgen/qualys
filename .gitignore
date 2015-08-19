@@ -1,0 +1,12 @@
+.DS_Store*
+*.bak
+*.hi
+*.o
+*.out
+*.plist
+*.prof
+*.swp
+.cabal-sandbox
+cabal.config
+cabal.sandbox.config
+dist/

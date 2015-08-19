@@ -1,0 +1,140 @@
+-- | Examples of using "Qualys.Knowledgebase". This is a documentation-only
+--   module.
+module Qualys.Cookbook.KnowledgeBase (
+-- * Using options
+
+-- $exampleOption1
+
+-- $exampleOption2
+
+-- * Running a function for each entry
+
+-- $exampleEach1
+
+-- * Working with a bunch of entries
+
+
+) where
+
+-- $exampleOption1
+--
+-- Get all details for any entries modified in the last two days, and print
+-- them.
+--
+--  @
+--  {-\# LANGUAGE OverloadedStrings \#-}
+--  import Control.Monad.IO.Class (liftIO)
+--  import Data.Time.Clock (getCurrentTime, addUTCTime)
+--  import Qualys
+--  import Qualys.Core
+--  import Qualys.KnowledgeBase
+--
+--  myConf :: QualysConf
+--  myConf = QualysConf
+--      { qcPlatform = qualysUSPlatform2
+--      , qcUsername = "myuser"
+--      , qcPassword = "mypass"
+--      , qcTimeOut  = 600 -- 10 Minutes
+--      }
+--
+--  main :: IO ()
+--  main = do
+--      now <- getCurrentTime
+--      let opts = kbDefaultOpts
+--              { kbTime   = Just [ KbModAfter (twodaysago now) ]
+--              , kbDetail = Just All
+--              }
+--      withQualys myConf $ runKnowledgeBase opts (liftIO . print)
+--    where
+--      twodaysago = addUTCTime $ 2 * (-86400)
+-- @
+
+-- $exampleOption2
+--
+-- Print entries published between two and four days ago.
+--
+--  @
+--  {-\# LANGUAGE OverloadedStrings \#-}
+--  import Control.Monad.IO.Class (liftIO)
+--  import Data.Time.Clock (getCurrentTime, addUTCTime)
+--  import Qualys
+--  import Qualys.Core
+--  import Qualys.KnowledgeBase
+--
+--  myConf :: QualysConf
+--  myConf = QualysConf
+--      { qcPlatform = qualysUSPlatform2
+--      , qcUsername = "myuser"
+--      , qcPassword = "mypass"
+--      , qcTimeOut  = 600 -- 10 Minutes
+--      }
+--
+--  main :: IO ()
+--  main = do
+--      now <- getCurrentTime
+--      let opts = kbDefaultOpts
+--               { kbTime = Just [ KbPubAfter  (daysago 4 now)
+--                               , KbPubBefore (daysago 2 now)
+--                               ]
+--               }
+--      withQualys myConf $ runKnowledgeBase opts (liftIO . print)
+--     where
+--       daysago x = addUTCTime $ x * (-86400)
+-- @
+
+-- $exampleEach1
+--
+-- This type of workflow will use less memory than working with bulk
+-- entries.
+--
+-- Put vulnerabilities and CVEs into a database via ODBC for entries that have
+-- been modified in the last day.
+--
+--  @
+--  import Data.Time.Clock (getCurrentTime, addUTCTime)
+--  import qualified Database.HDBC      as DB
+--  import qualified Database.HDBC.ODBC as DB
+--  import Qualys
+--
+--  data DbHolder = DbHolder
+--      { dbConn   :: DB.Connection
+--      , vulnStmt :: DB.Statement
+--      , cveStmt  :: DB.Statement
+--      }
+--
+--  dbStart :: IO DbHolder
+--  dbStart = do
+--      conn <- DB.connectODBC "DSC=vulns;UID=me;PWD=metoo"
+--      vst  <- DB.prepare conn "INSERT INTO vuln (QID, Severity) VALUES (?,?)"
+--      cst  <- DB.prepare conn "INSERT INTO cve (QID, CVEID) VALUE (?,?)"
+--      return $ DbHolder
+--          { dbConn   = conn
+--          , vulnStmt = vst
+--          , cveStmt  = cst
+--          }
+--
+--  dbEnd :: DbHolder -> IO ()
+--  dbEnd = do
+--      DB.commit     $ dbConn c
+--      DB.disconnect $ dbConn c
+--
+--  dbWrite :: DbHolder -> Vulnerability -> IO ()
+--  dbWrite c v = do
+--      DB.execute (vulnStmt c) [qkbQid v, qkbSev v]
+--      mapM_ execCve $ qkbCve v
+--    where
+--      execCve x =
+--
+--  main :: IO ()
+--  main = do
+--      now <- getCurrentTime
+--      let opts = kbDefaultOpts
+--              { qkbTime   = Just [ QkbModAfter (onedayago now) ]
+--              , qkbDetail = Just All
+--              }
+--      dbh <- startDb
+--      withQualys opts $ runQualysKb $ dbWrite dbh
+--      dbEnd dbh
+--    where
+--      onedayago = addUTCTime . realToFrac (-86400)
+--  @

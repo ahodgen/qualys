@@ -1,0 +1,48 @@
+name:                qualys
+category:            API
+version:             0.0.0.1
+homepage:            https://github.com/ahodgen/qualys
+bug-reports:         https://github.com/ahodgen/qualys/issues
+license:             BSD3
+license-file:        LICENSE
+author:              Aaron Hodgen
+maintainer:          ahodgen@kill-9.org
+build-type:          Simple
+cabal-version:       >=1.10
+synopsis:            Client for the Qualys API
+description:         Client for the QUalys API
+
+library
+  Exposed-Modules:
+    Qualys
+    Qualys.Cookbook.KnowledgeBase
+    Qualys.Core
+    Qualys.Internal
+    Qualys.KnowledgeBase
+    Qualys.Options
+    Qualys.V2api
+  Build-Depends:      attoparsec
+                    , base
+                    , bytestring
+                    , containers
+                    , conduit
+                    , data-default
+                    , failure
+                    , http-client
+                    , http-client-tls
+                    , http-types
+                    , monad-control
+                    , mtl
+                    , old-locale
+                    , resourcet
+                    , retry
+                    , safe
+                    , text
+                    , time
+                    , transformers
+                    , xml-conduit
+                    , xml-types
+                    , vector
+
+  ghc-options:   -Wall -O2 -fwarn-incomplete-patterns -Werror -fwarn-tabs -fwarn-incomplete-record-updates -fwarn-unused-do-bind -fwarn-incomplete-uni-patterns
+  default-language:    Haskell2010
