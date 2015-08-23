@@ -11,6 +11,11 @@ module Qualys.V2api
     , uniqueParams
       -- * Types
     , QualRet (..)
+      -- * Etc.
+    , parseBool
+    , parseUInt
+    , parseBound
+    , parseSev
       -- * Low-level functions
       -- |
       -- This section contains functions for fetching results from the
@@ -32,6 +37,7 @@ import qualified Data.Map as M
 import           Data.Monoid ((<>))
 import           Data.Text (Text)
 import           Data.Text.Encoding (encodeUtf8)
+import qualified Data.Text.Read as T
 import           Data.Time.Calendar (Day)
 import           Data.Time.Clock (UTCTime)
 import           Data.Time.Format (formatTime)
@@ -85,6 +91,28 @@ toOptList f xs = B.intercalate "," $ fmap f xs
 --   if a duplicate is encountered.
 uniqueParams :: [Param] -> [Param]
 uniqueParams = M.toList . M.fromList
+
+-- | Parse a text into a Bool, using the Qualys notion of true and false.
+parseBool :: Text -> Maybe Bool
+parseBool "0" = Just False
+parseBool "1" = Just True
+parseBool _   = Nothing
+
+parseUInt :: Integral a => Text -> Maybe a
+parseUInt x = case T.decimal x of
+    Right (n,"") -> Just n
+    _            -> Nothing
+
+parseBound :: Integral a => a -> a -> Text -> Maybe a
+parseBound mn mx x = check =<< parseUInt x
+  where
+    check n
+        | n >= mn && n <= mx = Just n
+        | otherwise          = Nothing
+
+-- Parse a text value into a severity, enforcing the correct range.
+parseSev :: Integral a => Text -> Maybe a
+parseSev = parseBound 0 5
 
 -- | Return value (<WARNING>) from Qualys
 data QualRet = QualRet
