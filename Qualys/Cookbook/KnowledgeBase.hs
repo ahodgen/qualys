@@ -32,18 +32,17 @@ module Qualys.Cookbook.KnowledgeBase (
 --  myConf :: QualysConf
 --  myConf = QualysConf
 --      { qcPlatform = qualysUSPlatform2
---      , qcUsername = "myuser"
---      , qcPassword = "mypass"
+--      , qcUsername = \"myuser\"
+--      , qcPassword = \"mypass\"
 --      , qcTimeOut  = 600 -- 10 Minutes
 --      }
 --
 --  main :: IO ()
 --  main = do
 --      now <- getCurrentTime
---      let opts = kbDefaultOpts
---              { kbTime   = Just [ KbModAfter (twodaysago now) ]
---              , kbDetail = Just All
---              }
+--      let opts = [ KboModAfter (twodaysago now)
+--                 , kboDetail \"All\"
+--                 ]
 --      withQualys myConf $ runKnowledgeBase opts (liftIO . print)
 --    where
 --      twodaysago = addUTCTime $ 2 * (-86400)
@@ -64,19 +63,17 @@ module Qualys.Cookbook.KnowledgeBase (
 --  myConf :: QualysConf
 --  myConf = QualysConf
 --      { qcPlatform = qualysUSPlatform2
---      , qcUsername = "myuser"
---      , qcPassword = "mypass"
+--      , qcUsername = \"myuser\"
+--      , qcPassword = \"mypass\"
 --      , qcTimeOut  = 600 -- 10 Minutes
 --      }
 --
 --  main :: IO ()
 --  main = do
 --      now <- getCurrentTime
---      let opts = kbDefaultOpts
---               { kbTime = Just [ KbPubAfter  (daysago 4 now)
---                               , KbPubBefore (daysago 2 now)
---                               ]
---               }
+--      let opts = [ kboPubAfter  (daysago 4 now)
+--                 , kboPubBefore (daysago 2 now)
+--                 ]
 --      withQualys myConf $ runKnowledgeBase opts (liftIO . print)
 --     where
 --       daysago x = addUTCTime $ x * (-86400)

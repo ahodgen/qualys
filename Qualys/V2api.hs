@@ -1,28 +1,97 @@
-{-# LANGUAGE OverloadedStrings #-}
--- |
--- This module contains functions for fetching results from the
--- Qualys V2 API. You shouldn't need to use these unless you are extending
--- the API or need low-level access.
+{-# LANGUAGE OverloadedStrings, FlexibleInstances #-}
 module Qualys.V2api
-    ( buildV2ApiUrl
+    (
+      -- * Options Handling
+      Param
+    , OptValText (..)
+    , OptValTime (..)
+    , toOptInt
+    , toOptBool
+    , toOptList
+    , uniqueParams
+      -- * Types
+    , QualRet (..)
+      -- * Low-level functions
+      -- |
+      -- This section contains functions for fetching results from the
+      -- Qualys V2 API. You shouldn't need to use these unless you are extending
+      -- the API or need low-level access.
+    , buildV2ApiUrl
     , fetchQualysV2
     , fetchQualysV2Get
     ) where
 
-import Control.Applicative
-import Control.Concurrent (threadDelay)
-import Control.Exception (handle, throwIO)
-import Control.Monad.State
+import           Control.Applicative
+import           Control.Concurrent (threadDelay)
+import           Control.Exception (handle, throwIO)
+import           Control.Monad.State
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
-import Data.Monoid ((<>))
-import Network.HTTP.Client
-import Network.HTTP.Types.Header (ResponseHeaders)
-import Network.HTTP.Types.Status (Status(..))
+import qualified Data.Map as M
+import           Data.Monoid ((<>))
+import           Data.Text (Text)
+import           Data.Text.Encoding (encodeUtf8)
+import           Data.Time.Calendar (Day)
+import           Data.Time.Clock (UTCTime)
+import           Data.Time.Format (formatTime)
+import           System.Locale (defaultTimeLocale)
+import           Network.HTTP.Client
+import           Network.HTTP.Types.Header (ResponseHeaders)
+import           Network.HTTP.Types.Status (Status(..))
 
-import Qualys.Core
-import Qualys.Internal
+import          Qualys.Core
+import          Qualys.Internal
+
+type Param = (B.ByteString, B.ByteString)
+
+-- | A class for converting texty type option values into a ByteString.
+class OptValText a where
+    toOptTxt :: a -> B.ByteString
+
+instance OptValText Text where
+    toOptTxt = encodeUtf8
+
+instance OptValText [Char] where
+    toOptTxt = B8.pack
+
+instance OptValText B.ByteString where
+    toOptTxt = id
+
+-- | A class for converting time based option values into a ByteString.
+class OptValTime a where
+    toOptTm :: a -> B.ByteString
+
+instance OptValTime UTCTime where
+    toOptTm = B8.pack . formatTime defaultTimeLocale "%FT%TZ"
+
+instance OptValTime Day where
+    toOptTm = B8.pack . formatTime defaultTimeLocale "%F"
+
+-- | Integral option value to a ByteString
+toOptInt :: (Integral a, Show a) => a -> B.ByteString
+toOptInt = B8.pack . show
+
+-- | Boolean option value into a ByteString
+toOptBool :: Bool -> B.ByteString
+toOptBool True  = "1"
+toOptBool False = "0"
+
+-- | List of option values to a ByteString
+toOptList :: (a -> B.ByteString) -> [a] -> B.ByteString
+toOptList f xs = B.intercalate "," $ fmap f xs
+
+-- | Make a list of parameters unique. Values to the right are selected
+--   if a duplicate is encountered.
+uniqueParams :: [Param] -> [Param]
+uniqueParams = M.toList . M.fromList
+
+-- | Return value (<WARNING>) from Qualys
+data QualRet = QualRet
+    { qrCode :: Maybe Text
+    , qrMsg  :: Maybe Text
+    , qrUrl  :: Maybe Text
+    } deriving Show
 
 v2ApiPath :: String
 v2ApiPath = "/api/2.0/fo/"
@@ -49,7 +118,7 @@ rateLimitDelay xs =
     clExceed = (>=) <$> running <*> limit
     clExcDelay True  = Just 60
     clExcDelay False = Nothing
-    rlInt x = case BC.readInt x of
+    rlInt x = case B8.readInt x of
         Just (y,"") -> Just y
         _           -> Nothing
 
@@ -58,6 +127,7 @@ rateLimit req sess = handle rlErr $ httpLbs req (qManager sess)
   where
     rlErr (StatusCodeException (Status 409 _) hs _) = do
         rld <- rateLimitDelay hs
+        print $ "DELAY " <> show rld <> " seconds."
         threadDelay (rld*1000000)
         rateLimit req sess
     rlErr x = throwIO x

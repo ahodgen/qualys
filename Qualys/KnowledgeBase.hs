@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wwarn #-}
 -- | For practical examples see "Qualys.Cookbook.KnowledgeBase".
 module Qualys.KnowledgeBase
     (
@@ -6,147 +7,118 @@ module Qualys.KnowledgeBase
       runKnowledgeBase
     , getKnowledgeBase
     -- * Options
-    , KbOpts (..)
-    , KbTimeOpts (..)
-    , KbDetailOpt (..)
-    , KbDiscoveryMethod (..)
-    , KbDiscoveryAuthTypes (..)
-    , kbDefaultOpts
+    , kboModAfter
+    , kboModBefore
+    , kboPubAfter
+    , kboPubBefore
+    , kboUserModAfter
+    , kboUserModBefore
+    , kboServiceModAfter
+    , kboServiceModBefore
+    , kboIdMin
+    , kboIdMax
+    , kboIds
+    , kboDetail
+    , kboDiscMethod
+    , kboAuthTypes
+    , kboShowPciReasons
+    , kboIsPatchable
     -- * Types
     , Vulnerability (..)
     , VendRef (..)
     , Cvss (..)
     ) where
 
-import Control.Applicative hiding (many)
-import Control.Monad (join, void)
-import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Resource (MonadThrow (..))
-import qualified Data.Attoparsec.Text as AT
-import qualified Data.ByteString as B
+import           Control.Applicative hiding (many)
+import           Control.Monad (join, void)
+import           Control.Monad.IO.Class (liftIO, MonadIO)
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString.Char8 as B8
-import Data.Conduit (($$), ConduitM)
-import Data.Maybe (fromMaybe)
-import Data.Monoid
-import Data.Text (Text)
+import           Data.Conduit (($$), ConduitM)
+import           Data.Maybe (fromMaybe)
+import           Data.Monoid
+import           Data.Text (Text)
 import qualified Data.Text as T
-import Data.Time.Clock (UTCTime)
-import Data.Time.Format (parseTime)
-import Data.XML.Types
-import Network.HTTP.Client
-import Network.HTTP.Types (renderQuery)
-import System.Locale (defaultTimeLocale)
-import Text.XML.Stream.Parse
+import           Data.Time.Clock (UTCTime)
+import           Data.Time.Format (parseTime)
+import           Data.XML.Types
+import           Network.HTTP.Client
+import           Network.HTTP.Types (renderQuery)
+import           System.Locale (defaultTimeLocale)
+import           Text.XML.Stream.Parse
 
-import Qualys.Core
-import Qualys.Options
-import Qualys.V2api
+import           Qualys.Core
+import           Qualys.Util
+import           Qualys.V2api
 
 -- * Options for the Qualys KnowledgeBase
 
--- | Qualys KnowledgeBase options
-data KbOpts = KbOpts
-    { kbId            :: Maybe KbIdOpts
-    , kbTime          :: Maybe [KbTimeOpts]
-    , kbDetail        :: Maybe KbDetailOpt
-    , kbDiscovery     :: Maybe KbDiscoveryMethod
-    , kbDiscAuthTypes :: Maybe KbDiscoveryAuthTypes
-    }
+-- | Get entries modified after this time
+kboModAfter :: OptValTime a => a -> Param
+kboModAfter x = ("last_modified_after",  toOptTm x)
 
-instance QualysOption KbOpts where
-    toQualysParam x = (toQualysParam . kbId) x
-                   <> (toQualysParam . kbTime) x
-                   <> (toQualysParam . kbDetail) x
-                   <> (toQualysParam . kbDiscovery) x
+-- | Get entries modified before this time
+kboModBefore :: OptValTime a => a -> Param
+kboModBefore x = ("last_modified_before",  toOptTm x)
 
--- | Default options for the KnowledgeBase
-kbDefaultOpts :: KbOpts
-kbDefaultOpts = KbOpts
-    { kbId            = Nothing
-    , kbTime          = Nothing
-    , kbDetail        = Nothing
-    , kbDiscovery     = Nothing
-    , kbDiscAuthTypes = Nothing
-    }
+-- | Get entries published after this time
+kboPubAfter :: OptValTime a => a -> Param
+kboPubAfter x = ("published_after", toOptTm x)
 
--- | Time-based options
-data KbTimeOpts = KbModAfter  UTCTime
-                 -- ^ Only get entries modified after this time
-                 | KbModBefore UTCTime
-                 -- ^ Only get entries modified before this time
-                 | KbPubAfter  UTCTime
-                 -- ^ Get entries published after this time
-                 | KbPubBefore UTCTime
-                 -- ^ Get entries published before this time
-                 | KbUserModAfter  UTCTime
-                 -- ^ Get entries modified by a user after this time
-                 | KbUserModBefore UTCTime
-                 -- ^ Get entries modified by a user before this time
-                 | KbServiceModAfter  UTCTime
-                 -- ^ Get entries modified by the service after this time
-                 | KbServiceModBefore UTCTime
-                 -- ^ Get entries modified by the service before this time
+-- | Get entries published before this time
+kboPubBefore :: OptValTime a => a -> Param
+kboPubBefore x = ("published_before", toOptTm x)
 
-instance QualysOption KbTimeOpts where
-    toQualysParam (KbModAfter t)  = [("last_modified_after",  qualysTimeOpt t)]
-    toQualysParam (KbModBefore t) = [("last_modified_before", qualysTimeOpt t)]
-    toQualysParam (KbPubAfter t)  = [("published_after",  qualysTimeOpt t)]
-    toQualysParam (KbPubBefore t) = [("published_before", qualysTimeOpt t)]
-    toQualysParam (KbUserModAfter t)  = [("last_modified_by_user_after"
-                                          , qualysTimeOpt t)]
-    toQualysParam (KbUserModBefore t) = [("last_modified_by_user_before"
-                                          , qualysTimeOpt t)]
-    toQualysParam (KbServiceModAfter t)  = [("last_modified_by_service_after"
-                                             , qualysTimeOpt t)]
-    toQualysParam (KbServiceModBefore t) = [("last_modified_by_service_before"
-                                             , qualysTimeOpt t)]
+-- | Get entries modified by a user after this time
+kboUserModAfter :: OptValTime a => a -> Param
+kboUserModAfter x = ("last_modified_by_user_after", toOptTm x)
 
--- | QID based options
-data KbIdOpts = KbIds  [Int] -- ^ List of QIDs to retrieve
-              | KbIdMin Int  -- ^ Only get QIDs greater to or equal this value
-              | KbIdMax Int  -- ^ Only get QIDs less than or equal this value
+-- | Get entries modified by a user before this time
+kboUserModBefore :: OptValTime a => a -> Param
+kboUserModBefore x = ("last_modified_by_user_before", toOptTm x)
 
-instance QualysOption KbIdOpts where
-    toQualysParam (KbIdMin x) = [("id_min", showToBs x)]
-    toQualysParam (KbIdMax x) = [("id_max", showToBs x)]
-    toQualysParam (KbIds xs)  = [("ids", B.intercalate "," (fmap showToBs xs))]
+-- | Get entries modified by the service after this time
+kboServiceModAfter :: OptValTime a => a -> Param
+kboServiceModAfter x  = ("last_modified_by_service_after", toOptTm x)
 
+-- | Get entries modified by the service before this time
+kboServiceModBefore :: OptValTime a => a -> Param
+kboServiceModBefore x = ("last_modified_by_service_before", toOptTm x)
 
--- | Detail level to retrieve
-data KbDetailOpt = None  -- ^ Core elements
-                  | Basic -- ^ Core elements plus CVSS base and temporal scores
-                  | All   -- ^ All elements
-                  deriving Show
+-- | Get QIDs greater to or equal this value
+kboIdMin :: (Integral a, Show a) => a -> Param
+kboIdMin x = ("id_min", toOptInt x)
 
-instance QualysOption KbDetailOpt where
-    toQualysParam x = [("details",showToBs x)]
+-- | Get QIDs less than or equal this value
+kboIdMax :: (Integral a, Show a) => a -> Param
+kboIdMax x = ("id_max", toOptInt x)
 
--- | Get entries with a particular discovery method
-data KbDiscoveryMethod = Remote
-                        | Authenticated
-                        | RemoteOnly
-                        | AuthenticatedOnly
-                        | RemoteAndAuthenticated
-                        deriving Show
+-- | List of QIDs to retrieve
+kboIds :: (Integral a, Show a) => [a] -> Param
+kboIds xs  = ("ids", toOptList toOptInt xs)
 
-instance QualysOption KbDiscoveryMethod where
-    toQualysParam x = [("discovery_method", showToBs x)]
+-- | Detail level to Retrieve
+kboDetail :: OptValText a => a -> Param
+kboDetail x = ("details", toOptTxt x)
 
--- | Authentication types
-data KbAuthTypes = Windows| Oracle | Unix | SNMP deriving Show
+-- | Discovery Method
+kboDiscMethod :: OptValText a => a -> Param
+kboDiscMethod x = ("discovery_method", toOptTxt x)
 
--- | Get entries with these authentication types
-newtype KbDiscoveryAuthTypes = KbDiscoveryAuthTypes [KbAuthTypes]
+-- | Retrieve vulnerabilities with these authentication types.
+--   (Valid values are Windows, Oracle, Unix, and SNMP)
+kboAuthTypes :: OptValText a => [a] -> Param
+kboAuthTypes xs = ("discovery_auth_types" , toOptList toOptTxt xs)
 
-instance QualysOption KbDiscoveryAuthTypes where
-    toQualysParam (KbDiscoveryAuthTypes xs) =
-                       [("discovery_auth_types"
-                        , B.intercalate "," (fmap showToBs xs))]
+-- | Include reasons for passing or failing PCI compliance by passing True.
+kboShowPciReasons :: Bool -> Param
+kboShowPciReasons x = ("show_pci_reasons", toOptBool x)
 
--- show_pci_reasons
--- discovery_auth_types
--- is_patchable
+-- | Retrieve vulnerabilities that are patchable (True) or not patchable
+--   (False).
+kboIsPatchable :: Bool -> Param
+kboIsPatchable x = ("show_pci_reasons", toOptBool x)
 
 data Vulnerability = Vuln
     { kbQid      :: Int        -- ^ QID (Qualys ID) of the vulnerability
@@ -189,13 +161,6 @@ data Cvss = Cvss
     , repConf   :: Maybe Int -- ^ Report confidence
     } deriving (Show, Eq)
 
--- | Return value (<WARNING>) from Qualys
-data QualRet = QualRet
-    { qrCode :: Maybe Text
-    , qrMsg  :: Maybe Text
-    , qrUrl  :: Maybe Text
-    } deriving Show
-
 parseDoc :: (Monoid a, MonadThrow m) => (Vulnerability -> m a) ->
             ConduitM Event o m (Maybe QualRet, a)
 parseDoc f = force "No output!" .  tagNoAttr "KNOWLEDGE_BASE_VULN_LIST_OUTPUT" $
@@ -214,32 +179,8 @@ parseVulns f = do
     x <- tagNoAttr "VULN_LIST" $ many (parseVuln f)
     return $ mconcat $ fromMaybe [] x
 
-parseInt :: (Integral a, Num a) => Text -> Maybe a
-parseInt x = case AT.parseOnly AT.decimal x of
-    Left  _ -> Nothing
-    Right n -> Just n
-
-parseBound :: (Integral a, Num a) => a -> a -> Text -> Maybe a
-parseBound mn mx x = case AT.parseOnly AT.decimal x of
-    Left  _ -> Nothing
-    Right n -> check n
-  where
-    check n
-        | n >= mn && n <= mx = Just n
-        | otherwise          = Nothing
-
--- Parse a text value into a severity, enforcing the correct range.
-parseSev :: (Integral a, Num a) => Text -> Maybe a
-parseSev = parseBound 0 5
-
-parseCvssScore :: (Integral a, Num a) => Text -> Maybe a
+parseCvssScore :: Integral a => Text -> Maybe a
 parseCvssScore = parseBound 0 10
-
--- | Parse a text into a Bool, using the Qualys notion of true and false.
-parseBool :: Text -> Maybe Bool
-parseBool "0" = Just False
-parseBool "1" = Just True
-parseBool _   = Nothing
 
 -- | Parse date/time
 parseDate :: Text -> Maybe UTCTime
@@ -259,7 +200,7 @@ parseVuln :: (MonadThrow m) => (Vulnerability -> m a) ->
              ConduitM Event o m (Maybe a)
 parseVuln f = tagNoAttr "VULN" $ do
     q <- force "No QID!"       $ tagNoAttr "QID" content
-    qid <- case parseInt q of
+    qid <- case parseUInt q of
                 Nothing -> fail $ "Bad QID: " <> show q
                 Just x  -> return x
     v <- force "No VULN_TYPE!" $ tagNoAttr "VULN_TYPE" content
@@ -347,15 +288,15 @@ parseCVSS' = tagNoAttr "CVSS" $ do
     return Cvss
         { baseScore = parseCvssScore =<< base
         , tempScore = parseCvssScore =<< temp
-        , accVector = parseInt =<< fst =<< ac
-        , accCompl  = parseInt =<< snd =<< ac
-        , impConf   = parseInt =<< fst' =<< im
-        , impInteg  = parseInt =<< snd' =<< im
-        , impAvail  = parseInt =<< thd' =<< im
-        , authed    = parseInt =<< a
-        , exploit   = parseInt =<< e
-        , remLevel  = parseInt =<< rl
-        , repConf   = parseInt =<< rc
+        , accVector = parseUInt =<< fst =<< ac
+        , accCompl  = parseUInt =<< snd =<< ac
+        , impConf   = parseUInt =<< fst' =<< im
+        , impInteg  = parseUInt =<< snd' =<< im
+        , impAvail  = parseUInt =<< thd' =<< im
+        , authed    = parseUInt =<< a
+        , exploit   = parseUInt =<< e
+        , remLevel  = parseUInt =<< rl
+        , repConf   = parseUInt =<< rc
         }
   where
     fst' (x,_,_) = x
@@ -380,7 +321,7 @@ parseCVE = tagNoAttr "CVE" $ do
     parseDiscard "URL"
     return i
 
--- | Parse DISCOVERY, discarding the result
+-- | Parse DISCOVERY
 parseDiscovery :: (MonadThrow m) =>
                   ConduitM Event o m (Maybe (Bool, Maybe [Text]))
 parseDiscovery = tagNoAttr "DISCOVERY" $ do
@@ -432,20 +373,22 @@ runKb f uri = do
                         liftIO . print $ qrMsg r
                         return xs
 
-paramsToQuery :: [(B.ByteString,B.ByteString)] -> String
-paramsToQuery xs = B8.unpack . renderQuery True $ fmap p2q xs
+paramsToQuery :: [Param] -> String
+paramsToQuery xs = B8.unpack . renderQuery True . fmap p2q $ uniqueParams xs
   where
     p2q (a,b) = (a,Just b)
 
--- | Run a function for each entry returned from the KnowledgeBase.
+-- | Run a function for each entry returned from the KnowledgeBase and
+--   collect the results.
 runKnowledgeBase :: (Monoid a, MonadIO m, MonadThrow m) =>
-                    KbOpts -> (Vulnerability -> QualysT m a) -> QualysT m a
-runKnowledgeBase c f = do
-    let query = paramsToQuery $ [("action","list")] <> toQualysParam c
+                    [Param] -> (Vulnerability -> QualysT m a) -> QualysT m a
+runKnowledgeBase ps f = do
+    let query = paramsToQuery $ [("action","list")] <> ps
+--    let query = paramsToQuery $ ps
     base <- buildV2ApiUrl "knowledge_base/vuln/"
     runKb f (Just $ base <> query)
 
 -- | Get entries from the KnowledgeBase.
 getKnowledgeBase :: (MonadIO m, MonadThrow m) =>
-                    KbOpts -> QualysT m [Vulnerability]
-getKnowledgeBase c = runKnowledgeBase c (\x -> return [x])
+                    [Param] -> QualysT m [Vulnerability]
+getKnowledgeBase ps = runKnowledgeBase ps (\x -> return [x])
