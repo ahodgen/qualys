@@ -11,42 +11,52 @@ module Qualys.V2api
     , uniqueParams
       -- * Types
     , QualRet (..)
-      -- * Etc.
+      -- * Convenience functions for XML processing
     , parseBool
     , parseUInt
     , parseBound
     , parseSev
+    , parseDate
+    , requireTagNoAttr
+    , requireWith
+    , optionalWith
+    , parseDiscard
+    , parseWarning
       -- * Low-level functions
       -- |
       -- This section contains functions for fetching results from the
       -- Qualys V2 API. You shouldn't need to use these unless you are extending
       -- the API or need low-level access.
     , buildV2ApiUrl
-    , fetchQualysV2
-    , fetchQualysV2Get
+    , fetchV2
+    , fetchV2Get
     ) where
 
 import           Control.Applicative
 import           Control.Concurrent (threadDelay)
 import           Control.Exception (handle, throwIO)
 import           Control.Monad.State
+import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
+import           Data.Conduit (ConduitM)
 import qualified Data.Map as M
-import           Data.Monoid ((<>))
+import           Data.Monoid
 import           Data.Text (Text)
+import qualified Data.Text as T
 import           Data.Text.Encoding (encodeUtf8)
 import qualified Data.Text.Read as T
 import           Data.Time.Calendar (Day)
 import           Data.Time.Clock (UTCTime)
-import           Data.Time.Format (formatTime)
-import           System.Locale (defaultTimeLocale)
+import           Data.Time.Format (formatTime, parseTime)
+import           Data.XML.Types
 import           Network.HTTP.Client
 import           Network.HTTP.Types.Header (ResponseHeaders)
 import           Network.HTTP.Types.Status (Status(..))
+import           System.Locale (defaultTimeLocale)
+import           Text.XML.Stream.Parse
 
-import          Qualys.Core
 import          Qualys.Internal
 
 type Param = (B.ByteString, B.ByteString)
@@ -114,6 +124,35 @@ parseBound mn mx x = check =<< parseUInt x
 parseSev :: Integral a => Text -> Maybe a
 parseSev = parseBound 0 5
 
+-- | Parse a text value into UTCTime
+parseDate :: Text -> Maybe UTCTime
+parseDate = parseTime defaultTimeLocale "%FT%T%QZ" . T.unpack
+
+requireTagNoAttr :: (MonadThrow m) => Name -> ConduitM Event o m a ->
+                    ConduitM Event o m a
+requireTagNoAttr x = force err . tagNoAttr x
+  where
+    err = "Tag '" <> show x <> "' required!"
+
+-- | Force a value with a parsing function.
+requireWith :: (Text -> Maybe a) -> ConduitM Event o m (Maybe Text) ->
+             ConduitM Event o m a
+requireWith p i = do
+    x <- i
+    case join $ fmap p x of
+        Nothing -> fail $ "Bad value '" <> show x <> "'"
+        Just y  -> return y
+
+optionalWith :: MonadThrow m => (a -> Maybe b) ->
+                ConduitM Event o m (Maybe a) -> ConduitM Event o m (Maybe b)
+optionalWith f v = do
+    x <- v
+    return $ f =<< x
+
+-- | Convenience function for ignoring an element and content
+parseDiscard :: (MonadThrow m) => Name -> ConduitM Event o m ()
+parseDiscard x = void $ tagNoAttr x contentMaybe
+
 -- | Return value (<WARNING>) from Qualys
 data QualRet = QualRet
     { qrCode :: Maybe Text
@@ -121,12 +160,19 @@ data QualRet = QualRet
     , qrUrl  :: Maybe Text
     } deriving Show
 
+-- | Parse warnings/errors from Qualys.
+parseWarning :: (MonadThrow m) => ConduitM Event o m (Maybe QualRet)
+parseWarning = tagNoAttr "WARNING" $ QualRet
+    <$> tagNoAttr "CODE" content
+    <*> tagNoAttr "TEXT" content
+    <*> tagNoAttr "URL"  content
+
 v2ApiPath :: String
 v2ApiPath = "/api/2.0/fo/"
 
 buildV2ApiUrl :: MonadIO m => String -> QualysT m String
 buildV2ApiUrl x = do
-    sess <- get
+    sess <- liftState get
     return $ "https://" <> qualPlatform sess <> v2ApiPath <> x
 
 rateLimitDelay :: ResponseHeaders -> IO Int
@@ -162,10 +208,9 @@ rateLimit req sess = handle rlErr $ httpLbs req (qManager sess)
 
 -- | Fetch a Qualys V2 API response via POST given a path (e.g. "session/")
 --   and a list of parameters.
-fetchQualysV2 :: MonadIO m => String -> [(B.ByteString, B.ByteString)] ->
-                              QualysT m (Response BL.ByteString)
-fetchQualysV2 p params = do
-    sess <- get
+fetchV2 :: MonadIO m => String -> [Param] -> QualysT m (Response BL.ByteString)
+fetchV2 p params = do
+    sess <- liftState get
     url <- buildV2ApiUrl p
     req <- liftIO $ parseUrl url
     let req' = req { method = "POST"
@@ -178,9 +223,9 @@ fetchQualysV2 p params = do
     liftIO $ rateLimit req'' sess
 
 -- | Get a Qualys V2 API response given a full URL.
-fetchQualysV2Get :: MonadIO m => String -> QualysT m (Response BL.ByteString)
-fetchQualysV2Get url = do
-    sess <- get
+fetchV2Get :: MonadIO m => String -> QualysT m (Response BL.ByteString)
+fetchV2Get url = do
+    sess <- liftState get
     req <- liftIO $ parseUrl url
     let req' = req { method = "GET"
                    , requestHeaders = qualysHeaders

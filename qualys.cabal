@@ -15,14 +15,14 @@ description:         Client for the QUalys API
 library
   Exposed-Modules:
     Qualys
+    Qualys.Cookbook
     Qualys.Cookbook.KnowledgeBase
-    Qualys.Core
+    Qualys.Cookbook.HostListDetection
+    Qualys.HostListDetection
     Qualys.Internal
     Qualys.KnowledgeBase
-    Qualys.Options
     Qualys.V2api
-  Build-Depends:      attoparsec
-                    , base
+  Build-Depends:      base
                     , bytestring
                     , containers
                     , conduit

@@ -32,9 +32,23 @@
 -- @
 
 module Qualys
-    ( withQualysT
-    , withQualys
-    , test
+    (
+    -- * Functions
+      withQualysT
+    -- * Types
+    , QualysT
+    -- * Configuration
+    , QualysConf (..)
+    -- ** Platform Configuation
+    , QualysPlatform (..)
+    , qualysUSPlatform1
+    , qualysUSPlatform2
+    , qualysEUPlatform
+    , qualysPrivateCloudPlatform
+    -- * API Actions
+    -- | For examples of using APIs, see "Qualys.Cookbook".
+    , module Qualys.KnowledgeBase
+    , module Qualys.HostListDetection
     ) where
 
 import Control.Monad.IO.Class (liftIO, MonadIO)
@@ -42,32 +56,20 @@ import Control.Monad.State (evalStateT)
 import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 
-import Qualys.Core
+import Qualys.Internal
 
-myConf :: QualysConf
-myConf = QualysConf
-      { qcPlatform = qualysUSPlatform2
-      , qcUsername = "myusername"
-      , qcPassword = "mypassword"
-      , qcTimeOut  = 300
-      }
+import Qualys.KnowledgeBase
+import Qualys.HostListDetection
 
-test :: IO ()
-test =
-    withQualysT myConf $
-        liftIO $ putStrLn "HELLO"
-
+-- | Given a 'QualysConf', run some action(s) against Qualys.
 withQualysT :: MonadIO m => QualysConf -> QualysT m a -> m a
 withQualysT c f = do
     manager <- liftIO $ newManager tlsManagerSettings
 --    let sess = QualysSess c (createCookieJar []) manager qualysV2Auth noUnAuth
-    evalStateT f (sess manager)
+    evalStateT (unQualysT f) (sess manager)
   where
     sess m = QualysSess
         { qConf = c
         , qCookieJar = createCookieJar []
         , qManager   = m
         }
-
-withQualys :: QualysConf -> Qualys a -> IO a
-withQualys = withQualysT

@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wwarn #-}
 -- | For practical examples see "Qualys.Cookbook.KnowledgeBase".
 module Qualys.KnowledgeBase
     (
@@ -25,12 +24,19 @@ module Qualys.KnowledgeBase
     , kboIsPatchable
     -- * Types
     , Vulnerability (..)
+    , Software (..)
     , VendRef (..)
+    , Compliance (..)
+    , Exploit (..)
+    , ExRef (..)
+    , Malware (..)
+    , MwInfo (..)
     , Cvss (..)
+    , Discovery (..)
     ) where
 
+import           Prelude hiding (mapM)
 import           Control.Applicative hiding (many)
-import           Control.Monad (join, void)
 import           Control.Monad.IO.Class (liftIO, MonadIO)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Resource (MonadThrow (..))
@@ -41,15 +47,13 @@ import           Data.Monoid
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Time.Clock (UTCTime)
-import           Data.Time.Format (parseTime)
+import           Data.Traversable (mapM)
 import           Data.XML.Types
 import           Network.HTTP.Client
 import           Network.HTTP.Types (renderQuery)
-import           System.Locale (defaultTimeLocale)
 import           Text.XML.Stream.Parse
 
-import           Qualys.Core
-import           Qualys.Util
+import           Qualys.Internal
 import           Qualys.V2api
 
 -- * Options for the Qualys KnowledgeBase
@@ -120,28 +124,75 @@ kboShowPciReasons x = ("show_pci_reasons", toOptBool x)
 kboIsPatchable :: Bool -> Param
 kboIsPatchable x = ("show_pci_reasons", toOptBool x)
 
+-- | A vulnerability from the KnowledgeBase. Some fields may not populate
+--   depending on the options given and features in your Qualys subscription.
 data Vulnerability = Vuln
-    { kbQid      :: Int        -- ^ QID (Qualys ID) of the vulnerability
-    , kbType     :: Text       -- ^ Type of vulnerability
-    , kbPci      :: Bool       -- ^ Is this a PCI vulnerability?
-    , kbPatch    :: Bool       -- ^ Is the vulnerability patchable?
-    , kbCat      :: Text       -- ^ Category (Web Application, etc.)
-    , kbSev      :: Int        -- ^ Severity (XXX:)
-    , kbTitle    :: Text       -- ^ Name of the vulnerability
-    , kbCVE      :: Maybe [Text] -- ^ CVE of the vulnerability
-    , kbCvss     :: Maybe Cvss -- ^ CVSS base score
-    , kbRemDisc  :: Bool       -- ^ Remote Discoverable
-    , kbAuth     :: Maybe [Text] -- ^ Auth. types used
-    , kbLastMod  :: Maybe UTCTime -- ^ Last service modification
-    , kbPublish  :: Maybe UTCTime -- ^ Published date and time
-    , kbVendRef  :: Maybe [VendRef] -- ^ Vendor reference URLs
-    , kbSolution :: Maybe Text    -- ^ Solution
-    , kbSolComm  :: Maybe Text    -- ^ Solution comment
+    { kbQid      :: Int                -- ^ QID (Qualys ID) of the vulnerability
+    , kbType     :: Text               -- ^ Type of vulnerability
+    , kbSev      :: Int                -- ^ Severity
+    , kbTitle    :: Text               -- ^ Name of the vulnerability
+    , kbCat      :: Text               -- ^ Category (Web Application, etc.)
+    , kbLastMod  :: Maybe UTCTime      -- ^ Last service modification
+    , kbPublish  :: Maybe UTCTime      -- ^ Published date and time
+    , kbBugTraq  :: Maybe [VendRef]    -- ^ BugTraq references
+    , kbPatch    :: Bool               -- ^ Is the vulnerability patchable?
+    , kbSoftware :: Maybe [Software]   -- ^ Software product information
+    , kbVendRef  :: Maybe [VendRef]    -- ^ Vendor references
+    , kbCVE      :: Maybe [VendRef]    -- ^ CVE(s) of the vulnerability
+    , kbDiag     :: Maybe Text         -- ^ Diagnosis
+    , kbDiagComm :: Maybe Text         -- ^ Diagnosis comment
+    , kbCons     :: Maybe Text         -- ^ Consequence
+    , kbConsComm :: Maybe Text         -- ^ Consequence comment
+    , kbSolution :: Maybe Text         -- ^ Solution
+    , kbSolComm  :: Maybe Text         -- ^ Solution comment
+    , kbCompl    :: Maybe [Compliance] -- ^ Compliance information
+    , kbExploits :: Maybe [Exploit]    -- ^ Exploit references
+    , kbMalware  :: Maybe [Malware]    -- ^ Malware information
+    , kbCvss     :: Maybe Cvss         -- ^ CVSS base score
+    , kbPci      :: Bool               -- ^ Is this a PCI vulnerability?
+    , kbPciReas  :: Maybe [Text]       -- ^ Why this passes/fails PCI compliance
+    , kbDiscover :: Discovery          -- ^ Vulnerability discovery information
+    } deriving (Show, Eq)
+
+data Software = Software
+    { swProduct :: Text
+    , swVendor  :: Text
     } deriving (Show, Eq)
 
 data VendRef = VendRef
-    { vrId  :: Maybe Text
-    , vrUrl :: Maybe Text
+    { vrId  :: Text
+    , vrUrl :: Text
+    } deriving (Show, Eq)
+
+data Compliance = Compliance
+    { cmpType    :: Text -- ^ Type of compliance (e.g. HIPAA, SOX)
+    , cmpSection :: Text -- ^ Section of policy or regulation
+    , cmpDescr   :: Text -- ^ Description
+    } deriving (Show, Eq)
+
+data Exploit = Exploit
+    { exSrcName :: Text    -- ^ Name of source
+    , exploits  :: [ExRef] -- ^ References
+    } deriving (Show, Eq)
+
+data ExRef = ExRef
+    { exrRef :: Text       -- ^ CVE reference
+    , exDesc :: Text       -- ^ Description
+    , exUrl  :: Maybe Text -- ^ URL of exploit if available
+    } deriving (Show, Eq)
+
+data Malware = Malware
+    { mwSrcName :: Text     -- ^ Name of source (e.g. Trend Micro)
+    , mwInfo    :: [MwInfo] -- ^ Malware information
+    } deriving (Show, Eq)
+
+data MwInfo = MwInfo
+    { mwId       :: Text    -- ^ Malware name/id
+    , mwType     :: Maybe Text -- ^ Type of malware (e.g. Backdoor)
+    , mwPlatform :: Maybe Text -- ^ Platforms affected
+    , mwAlias    :: Maybe Text -- ^ Other names used for this malware
+    , mwRating   :: Maybe Text -- ^ Overall risk rating
+    , mwUrl      :: Maybe Text -- ^ URL link to malware details
     } deriving (Show, Eq)
 
 -- | CVSS data for a 'Vulnerability'. See \"CVSS V2 Sub Metrics Mapping\"
@@ -161,117 +212,116 @@ data Cvss = Cvss
     , repConf   :: Maybe Int -- ^ Report confidence
     } deriving (Show, Eq)
 
+data Discovery = Discovery
+    { remoteDisc :: Bool         -- ^ Remote Discoverable
+    , authTypes  :: Maybe [Text] -- ^ Auth. types used
+    } deriving (Show, Eq)
+
 parseDoc :: (Monoid a, MonadThrow m) => (Vulnerability -> m a) ->
             ConduitM Event o m (Maybe QualRet, a)
-parseDoc f = force "No output!" .  tagNoAttr "KNOWLEDGE_BASE_VULN_LIST_OUTPUT" $
-           parseResp f
+parseDoc = requireTagNoAttr "KNOWLEDGE_BASE_VULN_LIST_OUTPUT" . parseResp
 
 parseResp :: (MonadThrow m, Monoid a) => (Vulnerability -> m a) ->
              ConduitM Event o m (Maybe QualRet,a)
-parseResp f = force "No RESPONSE" . tagNoAttr "RESPONSE" $ do
+parseResp f = requireTagNoAttr "RESPONSE" $ do
     parseDiscard "DATETIME"
     vs <- parseVulns f
     w  <- parseWarning
     return (w,vs)
 
-parseVulns :: (Monoid a, MonadThrow m) => (Vulnerability -> m a) -> ConduitM Event o m a
+parseVulns :: (Monoid a, MonadThrow m) => (Vulnerability -> m a) ->
+              ConduitM Event o m a
 parseVulns f = do
     x <- tagNoAttr "VULN_LIST" $ many (parseVuln f)
-    return $ mconcat $ fromMaybe [] x
+    return . mconcat $ fromMaybe [] x
 
 parseCvssScore :: Integral a => Text -> Maybe a
 parseCvssScore = parseBound 0 10
 
--- | Parse date/time
-parseDate :: Text -> Maybe UTCTime
-parseDate = parseTime defaultTimeLocale "%FT%T%QZ" . T.unpack
-
--- | Force a value with a parsing function.
-forceWith :: (Text -> Maybe a) -> ConduitM Event o m (Maybe Text) ->
-             ConduitM Event o m a
-forceWith p i = do
-    x <- i
-    case join $ fmap p x of
-        Nothing -> fail $ "Bad value '" <> show x <> "'"
-        Just y  -> return y
-
 -- | Parse a vulnerability record, and write it to the database.
 parseVuln :: (MonadThrow m) => (Vulnerability -> m a) ->
              ConduitM Event o m (Maybe a)
-parseVuln f = tagNoAttr "VULN" $ do
-    q <- force "No QID!"       $ tagNoAttr "QID" content
-    qid <- case parseUInt q of
-                Nothing -> fail $ "Bad QID: " <> show q
-                Just x  -> return x
-    v <- force "No VULN_TYPE!" $ tagNoAttr "VULN_TYPE" content
-    s <- forceWith parseSev    $ tagNoAttr "SEVERITY_LEVEL" content
-    t <- force "No TITLE!"     $ tagNoAttr "TITLE" content
-    c <- force "No category!"  $ tagNoAttr "CATEGORY" content
-    _ <- tagNoAttr "LAST_CUSTOMIZATION" $ do
-        parseDiscard "DATETIME"
-        parseDiscard "USER_LOGIN"
-    lm <- tagNoAttr "LAST_SERVICE_MODIFICATION_DATETIME" content
-    pub <- tagNoAttr "PUBLISHED_DATETIME" content
-    parseDiscList "BUGTRAQ_LIST" "BUGTRAQ" ["ID", "URL"]
-    p <- forceWith parseBool   $ tagNoAttr "PATCHABLE" content
-    parseDiscList "SOFTWARE_LIST" "SOFTWARE" ["PRODUCT", "VENDOR"]
-    vends <- parseVendRefs
-    cve <- parseCVEs
-    parseDiscard "DIAGNOSIS"
-    parseDiscard "DIAGNOSIS_COMMENT"
-    parseDiscard "CONSEQUENCE"
-    parseDiscard "CONSEQUENCE_COMMENT"
-    sol <- tagNoAttr "SOLUTION" content
-    slc <- tagNoAttr "SOLUTION_COMMENT" content
-    parseDiscList "COMPLIANCE_LIST" "COMPLIANCE"
-        ["TYPE", "SECTION", "DESCRIPTION"]
-    parseCorrelation
-    cvss <- parseCVSS'
-    pc <- forceWith parseBool  $ tagNoAttr "PCI_FLAG" content
-    parseDiscard "PCI_REASONS"
-    disc <- parseDiscovery
-    let (r,a) = fromMaybe (False,Nothing) disc
-    let vuln = Vuln
-            { kbQid  = qid
-            , kbType = v
-            , kbPci  = pc
-            , kbPatch = p
-            , kbCat   = c
-            , kbSev   = s
-            , kbTitle = t
-            , kbCVE   = cve
-            , kbCvss  = cvss
-            , kbRemDisc  = r
-            , kbAuth     = a
-            , kbLastMod  = parseDate =<< lm
-            , kbPublish  = parseDate =<< pub
-            , kbVendRef  = vends
-            , kbSolution = sol
-            , kbSolComm  = slc
-            }
-    lift $ f vuln
+parseVuln f = mapM (lift . f) =<<
+    tagNoAttr "VULN" (Vuln
+        <$> requireWith parseUInt (tagNoAttr "QID" content)
+        <*> requireTagNoAttr "VULN_TYPE" content
+        <*> requireWith parseSev (tagNoAttr "SEVERITY_LEVEL" content)
+        <*> requireTagNoAttr "TITLE" content
+        <*> requireTagNoAttr "CATEGORY" content
+        <*> (tagNoAttr "LAST_CUSTOMIZATION" (do
+                parseDiscard "DATETIME"
+                parseDiscard "USER_LOGIN")
+            *> optionalWith parseDate
+                (tagNoAttr "LAST_SERVICE_MODIFICATION_DATETIME" content))
+        <*> optionalWith parseDate (tagNoAttr "PUBLISHED_DATETIME" content)
+        <*> parseBugTraqList
+        <*> requireWith parseBool (tagNoAttr "PATCHABLE" content)
+        <*> parseSoftwareList
+        <*> parseVendRefs
+        <*> parseCVEs
+        <*> tagNoAttr "DIAGNOSIS" content
+        <*> tagNoAttr "DIAGNOSIS_COMMENT" content
+        <*> tagNoAttr "CONSEQUENCE" content
+        <*> tagNoAttr "CONSEQUENCE_COMMENT" content
+        <*> tagNoAttr "SOLUTION" content
+        <*> tagNoAttr "SOLUTION_COMMENT" content
+        <*> parseComplianceList
+        <*> optionalWith fst parseCorrelation
+        <*> optionalWith snd parseCorrelation
+        <*> parseCVSS
+        <*> requireWith parseBool (tagNoAttr "PCI_FLAG" content)
+        <*> tagNoAttr "PCI_REASONS" (many $ tagNoAttr "PCI_REASON" content)
+        <*> parseDiscovery)
+
+parseBugTraqList :: (MonadThrow m) => ConduitM Event o m (Maybe [VendRef])
+parseBugTraqList = tagNoAttr "BUGTRAQ_LIST" $ many parseBugTraq
+
+parseBugTraq :: (MonadThrow m) => ConduitM Event o m (Maybe VendRef)
+parseBugTraq = tagNoAttr "BUGTRAQ" $ VendRef
+    <$> requireTagNoAttr "ID" content
+    <*> requireTagNoAttr "URL" content
+
+parseSoftwareList :: (MonadThrow m) => ConduitM Event o m (Maybe [Software])
+parseSoftwareList = tagNoAttr "SOFTWARE_LIST" $ many parseSoftware
+
+parseSoftware :: (MonadThrow m) => ConduitM Event o m (Maybe Software)
+parseSoftware = tagNoAttr "SOFTWARE" $ Software
+    <$> requireTagNoAttr "PRODUCT" content
+    <*> requireTagNoAttr "VENDOR" content
 
 -- | Parse a CORRELATION, discarding the result
-parseCorrelation :: (MonadThrow m) => ConduitM Event o m ()
-parseCorrelation = do
-    _ <- tagNoAttr "CORRELATION" $ do
-        _ <- tagNoAttr "EXPLOITS" $ many
-            (tagNoAttr "EXPLT_SRC" $ do
-                parseDiscard  "SRC_NAME"
-                parseDiscList "EXPLT_LIST" "EXPLT" ["REF", "DESC", "LINK"]
-            )
-        _ <- tagNoAttr "MALWARE" $ many
-            (tagNoAttr "MW_SRC" $ do
-                parseDiscard  "SRC_NAME"
-                parseDiscList "MW_LIST" "MW_INFO"
-                    ["MW_ID", "MW_TYPE", "MW_PLATFORM", "MW_ALIAS"
-                    , "MW_RATING", "MW_LINK"]
-            )
-        return ()
-    return ()
+parseCorrelation :: (MonadThrow m) => ConduitM Event o m (Maybe (Maybe [Exploit],Maybe [Malware]))
+parseCorrelation = tagNoAttr "CORRELATION" $ (,)
+    <$> tagNoAttr "EXPLOITS" (many parseExpl)
+    <*> tagNoAttr "MALWARE" (many parseMalware)
 
-parseCVSS' :: (MonadThrow m) => ConduitM Event o m (Maybe Cvss)
-parseCVSS' = tagNoAttr "CVSS" $ do
+parseExpl :: (MonadThrow m) => ConduitM Event o m (Maybe Exploit)
+parseExpl = tagNoAttr "EXPLT_SRC" $ Exploit
+    <$> requireTagNoAttr "SRC_NAME" content
+    <*> fmap (fromMaybe []) (tagNoAttr "EXPLT_LIST" $ many parseExRef)
+
+parseExRef :: (MonadThrow m) => ConduitM Event o m (Maybe ExRef)
+parseExRef = tagNoAttr "EXPLT" $ ExRef
+    <$> requireTagNoAttr "REF" content
+    <*> requireTagNoAttr "DESC" content
+    <*> tagNoAttr "LINK" content
+
+parseMalware :: (MonadThrow m) => ConduitM Event o m (Maybe Malware)
+parseMalware = tagNoAttr "MW_SRC" $ Malware
+    <$> requireTagNoAttr "SRC_NAME" content
+    <*> fmap (fromMaybe []) (tagNoAttr "MW_LIST" $ many parseMwInfo)
+
+parseMwInfo :: (MonadThrow m) => ConduitM Event o m (Maybe MwInfo)
+parseMwInfo = tagNoAttr "MW_INFO" $ MwInfo
+    <$> requireTagNoAttr "MW_ID" content
+    <*> tagNoAttr "MW_TYPE" content
+    <*> tagNoAttr "MW_PLATFORM" content
+    <*> tagNoAttr "MW_ALIAS" content
+    <*> tagNoAttr "MW_RATING" content
+    <*> tagNoAttr "MW_LINK" content
+
+parseCVSS :: (MonadThrow m) => ConduitM Event o m (Maybe Cvss)
+parseCVSS = tagNoAttr "CVSS" $ do
     base <- tagName "BASE" (attr "source") (const content)
     temp <- tagNoAttr "TEMPORAL" content
     ac <- tagNoAttr "ACCESS" $ (,)
@@ -308,54 +358,40 @@ parseVendRefs = tagNoAttr "VENDOR_REFERENCE_LIST" $ many parseVendRef
 
 parseVendRef :: (MonadThrow m) => ConduitM Event o m (Maybe VendRef)
 parseVendRef = tagNoAttr "VENDOR_REFERENCE" $ VendRef
-    <$> tagNoAttr "ID" content
-    <*> tagNoAttr "URL" content
+    <$> requireTagNoAttr "ID" content
+    <*> requireTagNoAttr "URL" content
 
 -- | Parse CVEs
-parseCVEs :: (MonadThrow m) => ConduitM Event o m (Maybe [Text])
+parseCVEs :: (MonadThrow m) => ConduitM Event o m (Maybe [VendRef])
 parseCVEs = tagNoAttr "CVE_LIST" $ many parseCVE
 
-parseCVE :: (MonadThrow m) => ConduitM Event o m (Maybe Text)
-parseCVE = tagNoAttr "CVE" $ do
-    i <- force "No CVE-ID found" $ tagNoAttr "ID" content
-    parseDiscard "URL"
-    return i
+parseCVE :: (MonadThrow m) => ConduitM Event o m (Maybe VendRef)
+parseCVE = tagNoAttr "CVE" $ VendRef
+    <$> requireTagNoAttr "ID" content
+    <*> requireTagNoAttr "URL" content
+
+parseComplianceList :: (MonadThrow m) => ConduitM Event o m (Maybe [Compliance])
+parseComplianceList = tagNoAttr "COMPLIANCE_LIST" $ many parseCompliance
+
+parseCompliance :: (MonadThrow m) => ConduitM Event o m (Maybe Compliance)
+parseCompliance = tagNoAttr "COMPLIANCE" $ Compliance
+    <$> requireTagNoAttr "TYPE" content
+    <*> requireTagNoAttr "SECTION" content
+    <*> requireTagNoAttr "DESCRIPTION" content
 
 -- | Parse DISCOVERY
 parseDiscovery :: (MonadThrow m) =>
-                  ConduitM Event o m (Maybe (Bool, Maybe [Text]))
-parseDiscovery = tagNoAttr "DISCOVERY" $ do
-    r <- tagNoAttr "REMOTE" content
-    a <- tagNoAttr "AUTH_TYPE_LIST" (many $ tagNoAttr "AUTH_TYPE" content)
-    return (r == Just "1", a)
-
--- | Parse warnings/errors from Qualys.
-parseWarning :: (MonadThrow m) => ConduitM Event o m (Maybe QualRet)
-parseWarning = tagNoAttr "WARNING" $ QualRet
-        <$> tagNoAttr "CODE" content
-        <*> tagNoAttr "TEXT" content
-        <*> tagNoAttr "URL"  content
-
--- | Ignore a Qualys-style list and all its elements.
---   Arguments are 1) List name 2) List items
---                 3) List of elements in the list item.
-parseDiscList :: (MonadThrow m) => Name -> Name -> [Name] ->
-                 ConduitM Event o m ()
-parseDiscList list el vals = do
-    _ <- tagNoAttr list $ many (tagNoAttr el $ mapM_ parseDiscard vals)
-    return ()
-
--- | Convenience function for ignoring an element and content
-parseDiscard :: (MonadThrow m) => Name -> ConduitM Event o m ()
-parseDiscard x = void $ tagNoAttr x contentMaybe
+                  ConduitM Event o m Discovery
+parseDiscovery = requireTagNoAttr "DISCOVERY" $ Discovery
+    <$> requireWith parseBool (tagNoAttr "REMOTE" content)
+    <*> tagNoAttr "AUTH_TYPE_LIST" (many $ tagNoAttr "AUTH_TYPE" content)
 
 getKbPage :: (Monoid a, MonadIO m, MonadThrow m) =>
              (Vulnerability -> QualysT m a) -> Maybe String ->
              QualysT m (Maybe QualRet, a)
 getKbPage _ Nothing = return (Nothing, mempty)
 getKbPage f (Just uri) = do
-    res <- fetchQualysV2Get uri
-    liftIO $ print res
+    res <- fetchV2Get uri
     parseLBS def (responseBody res) $$ parseDoc f
 
 -- | Keep requesting records until we've processed everything, or failed.
