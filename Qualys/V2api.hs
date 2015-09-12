@@ -10,17 +10,8 @@ module Qualys.V2api
     , toOptList
     , uniqueParams
       -- * Types
-    , QualRet (..)
+    , V2Resp (..)
       -- * Convenience functions for XML processing
-    , parseBool
-    , parseUInt
-    , parseBound
-    , parseSev
-    , parseDate
-    , requireTagNoAttr
-    , requireWith
-    , optionalWith
-    , parseDiscard
     , parseWarning
       -- * Low-level functions
       -- |
@@ -35,7 +26,7 @@ module Qualys.V2api
 import           Control.Applicative
 import           Control.Concurrent (threadDelay)
 import           Control.Exception (handle, throwIO)
-import           Control.Monad.State
+import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
@@ -44,12 +35,10 @@ import           Data.Conduit (ConduitM)
 import qualified Data.Map as M
 import           Data.Monoid
 import           Data.Text (Text)
-import qualified Data.Text as T
 import           Data.Text.Encoding (encodeUtf8)
-import qualified Data.Text.Read as T
 import           Data.Time.Calendar (Day)
 import           Data.Time.Clock (UTCTime)
-import           Data.Time.Format (formatTime, parseTime)
+import           Data.Time.Format (formatTime)
 import           Data.XML.Types
 import           Network.HTTP.Client
 import           Network.HTTP.Types.Header (ResponseHeaders)
@@ -102,67 +91,16 @@ toOptList f xs = B.intercalate "," $ fmap f xs
 uniqueParams :: [Param] -> [Param]
 uniqueParams = M.toList . M.fromList
 
--- | Parse a text into a Bool, using the Qualys notion of true and false.
-parseBool :: Text -> Maybe Bool
-parseBool "0" = Just False
-parseBool "1" = Just True
-parseBool _   = Nothing
-
-parseUInt :: Integral a => Text -> Maybe a
-parseUInt x = case T.decimal x of
-    Right (n,"") -> Just n
-    _            -> Nothing
-
-parseBound :: Integral a => a -> a -> Text -> Maybe a
-parseBound mn mx x = check =<< parseUInt x
-  where
-    check n
-        | n >= mn && n <= mx = Just n
-        | otherwise          = Nothing
-
--- Parse a text value into a severity, enforcing the correct range.
-parseSev :: Integral a => Text -> Maybe a
-parseSev = parseBound 0 5
-
--- | Parse a text value into UTCTime
-parseDate :: Text -> Maybe UTCTime
-parseDate = parseTime defaultTimeLocale "%FT%T%QZ" . T.unpack
-
-requireTagNoAttr :: (MonadThrow m) => Name -> ConduitM Event o m a ->
-                    ConduitM Event o m a
-requireTagNoAttr x = force err . tagNoAttr x
-  where
-    err = "Tag '" <> show x <> "' required!"
-
--- | Force a value with a parsing function.
-requireWith :: (Text -> Maybe a) -> ConduitM Event o m (Maybe Text) ->
-             ConduitM Event o m a
-requireWith p i = do
-    x <- i
-    case join $ fmap p x of
-        Nothing -> fail $ "Bad value '" <> show x <> "'"
-        Just y  -> return y
-
-optionalWith :: MonadThrow m => (a -> Maybe b) ->
-                ConduitM Event o m (Maybe a) -> ConduitM Event o m (Maybe b)
-optionalWith f v = do
-    x <- v
-    return $ f =<< x
-
--- | Convenience function for ignoring an element and content
-parseDiscard :: (MonadThrow m) => Name -> ConduitM Event o m ()
-parseDiscard x = void $ tagNoAttr x contentMaybe
-
 -- | Return value (<WARNING>) from Qualys
-data QualRet = QualRet
-    { qrCode :: Maybe Text
-    , qrMsg  :: Maybe Text
-    , qrUrl  :: Maybe Text
+data V2Resp = V2Resp
+    { v2rCode :: Maybe Text
+    , v2rMsg  :: Maybe Text
+    , v2rUrl  :: Maybe Text
     } deriving Show
 
 -- | Parse warnings/errors from Qualys.
-parseWarning :: (MonadThrow m) => ConduitM Event o m (Maybe QualRet)
-parseWarning = tagNoAttr "WARNING" $ QualRet
+parseWarning :: (MonadThrow m) => ConduitM Event o m (Maybe V2Resp)
+parseWarning = tagNoAttr "WARNING" $ V2Resp
     <$> tagNoAttr "CODE" content
     <*> tagNoAttr "TEXT" content
     <*> tagNoAttr "URL"  content
@@ -172,7 +110,7 @@ v2ApiPath = "/api/2.0/fo/"
 
 buildV2ApiUrl :: MonadIO m => String -> QualysT m String
 buildV2ApiUrl x = do
-    sess <- liftState get
+    sess <- liftReader ask
     return $ "https://" <> qualPlatform sess <> v2ApiPath <> x
 
 rateLimitDelay :: ResponseHeaders -> IO Int
@@ -210,12 +148,11 @@ rateLimit req sess = handle rlErr $ httpLbs req (qManager sess)
 --   and a list of parameters.
 fetchV2 :: MonadIO m => String -> [Param] -> QualysT m (Response BL.ByteString)
 fetchV2 p params = do
-    sess <- liftState get
+    sess <- liftReader ask
     url <- buildV2ApiUrl p
     req <- liftIO $ parseUrl url
     let req' = req { method = "POST"
                    , requestHeaders = qualysHeaders
-                   , cookieJar = Just $ qCookieJar sess
                    , responseTimeout = Just (1000000 * qualTimeout sess)
                    }
     let req'' = urlEncodedBody params $
@@ -225,53 +162,11 @@ fetchV2 p params = do
 -- | Get a Qualys V2 API response given a full URL.
 fetchV2Get :: MonadIO m => String -> QualysT m (Response BL.ByteString)
 fetchV2Get url = do
-    sess <- liftState get
+    sess <- liftReader ask
     req <- liftIO $ parseUrl url
     let req' = req { method = "GET"
                    , requestHeaders = qualysHeaders
-                   , cookieJar = Just $ qCookieJar sess
                    , responseTimeout = Just (1000000 * qualTimeout sess)
                    }
     let req'' = applyBasicAuth (qualUser sess) (qualPass sess) req'
     liftIO $ rateLimit req'' sess
-
-{-
- -- Session based auth for V2 API.
-qualSess :: MonadIO m => [(B.ByteString, B.ByteString)] ->
-                         QualysT m (Response BL.ByteString)
-qualSess params = do
-    sess <- get
-    url <- buildV2ApiUrl "session/"
-    req <- liftIO $ parseUrl url
-    let req' = req { method = "POST"
-                   , requestHeaders = qualysHeaders
-                   , cookieJar = Just $ qCookieJar sess
-                   , responseTimeout = Just (1000000 * qualTimeout sess)
-                   }
-    let req'' = urlEncodedBody params req'
-    liftIO $ httpLbs req'' (qManager sess)
-
-qualysV2Auth :: MonadIO m => QualysT m ()
-qualysV2Auth = do
-    sess <- get
-    res <- qualSess (postParam sess)
-    put $ sess
-        { qCookieJar = responseCookieJar res
-        , qV2Auth = return ()
-        , qV2Unauth = qualysV2UnAuth
-        }
-    return ()
-  where
-    postParam s =
-        [ ("action","login")
-        , ("username",qualUser s)
-        , ("password", qualPass s)
-        ]
-
-qualysV2UnAuth :: MonadIO m => QualysT m ()
-qualysV2UnAuth = do
-    _ <- qualSess param
-    return ()
-  where
-    param = [("action","logout")]
--}

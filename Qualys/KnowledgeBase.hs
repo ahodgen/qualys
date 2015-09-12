@@ -218,11 +218,11 @@ data Discovery = Discovery
     } deriving (Show, Eq)
 
 parseDoc :: (Monoid a, MonadThrow m) => (Vulnerability -> m a) ->
-            ConduitM Event o m (Maybe QualRet, a)
+            ConduitM Event o m (Maybe V2Resp, a)
 parseDoc = requireTagNoAttr "KNOWLEDGE_BASE_VULN_LIST_OUTPUT" . parseResp
 
 parseResp :: (MonadThrow m, Monoid a) => (Vulnerability -> m a) ->
-             ConduitM Event o m (Maybe QualRet,a)
+             ConduitM Event o m (Maybe V2Resp, a)
 parseResp f = requireTagNoAttr "RESPONSE" $ do
     parseDiscard "DATETIME"
     vs <- parseVulns f
@@ -388,7 +388,7 @@ parseDiscovery = requireTagNoAttr "DISCOVERY" $ Discovery
 
 getKbPage :: (Monoid a, MonadIO m, MonadThrow m) =>
              (Vulnerability -> QualysT m a) -> Maybe String ->
-             QualysT m (Maybe QualRet, a)
+             QualysT m (Maybe V2Resp, a)
 getKbPage _ Nothing = return (Nothing, mempty)
 getKbPage f (Just uri) = do
     res <- fetchV2Get uri
@@ -401,12 +401,12 @@ runKb f uri = do
     (ret,xs) <- getKbPage f uri
     case ret of
         Nothing -> return xs
-        Just r  -> case qrCode r of
+        Just r  -> case v2rCode r of
                     Just "1980" -> do
-                        ys <- runKb f (T.unpack <$> qrUrl r)
+                        ys <- runKb f (T.unpack <$> v2rUrl r)
                         return $ ys <> xs
                     _           -> do
-                        liftIO . print $ qrMsg r
+                        liftIO . print $ v2rMsg r
                         return xs
 
 paramsToQuery :: [Param] -> String
