@@ -193,13 +193,13 @@ data Tag = Tag
     } deriving (Show, Eq)
 
 parseDoc :: (MonadThrow  m, Monoid a) => (Host -> m a) ->
-            ConduitM Event o m (Maybe QualRet, a)
+            ConduitM Event o m (Maybe V2Resp, a)
 parseDoc tm =
     requireTagNoAttr "HOST_LIST_VM_DETECTION_OUTPUT" $
     parseResp tm
 
 parseResp :: (MonadThrow m, Monoid a) => (Host -> m a) ->
-             ConduitM Event o m (Maybe QualRet, a)
+             ConduitM Event o m (Maybe V2Resp, a)
 parseResp tm = requireTagNoAttr "RESPONSE" $ do
     parseDiscard "DATETIME"
     hs <- parseHosts tm
@@ -263,7 +263,7 @@ parseDetection = tagNoAttr "DETECTION" $ Detection
 
 getPage :: (Monoid a, MonadIO m, MonadThrow m) =>
            (Host -> QualysT m a) -> Maybe String ->
-           QualysT m (Maybe QualRet, a)
+           QualysT m (Maybe V2Resp, a)
 getPage _ Nothing = return (Nothing, mempty)
 getPage f (Just uri) = do
     res <- fetchV2Get uri
@@ -277,12 +277,12 @@ runHld f uri = do
     (ret,xs) <- getPage f uri
     case ret of
         Nothing -> return xs
-        Just r  -> case qrCode r of
+        Just r  -> case v2rCode r of
                     Just "1980" -> do
-                        ys <- runHld f (T.unpack <$> qrUrl r)
+                        ys <- runHld f (T.unpack <$> v2rUrl r)
                         return $ ys <> xs
                     _           -> do
-                        liftIO . print $ qrMsg r
+                        liftIO . print $ v2rMsg r
                         return xs
 
 paramsToQuery :: [Param] -> String
@@ -300,6 +300,5 @@ runHostListDetection ps f = do
     runHld f (Just $ base <> query)
 
 -- | Get entries from Host List Detection.
-getHostListDetection :: (MonadIO m, MonadThrow m) =>
-                        [Param] -> QualysT m [Host]
+getHostListDetection :: (MonadIO m, MonadThrow m) => [Param] -> QualysT m [Host]
 getHostListDetection ps = runHostListDetection ps (\x -> return [x])

@@ -21,8 +21,11 @@ library
     Qualys.HostListDetection
     Qualys.Internal
     Qualys.KnowledgeBase
+    Qualys.WasScan
     Qualys.V2api
+    Qualys.V3api
   Build-Depends:      base
+                    , base64-bytestring
                     , bytestring
                     , containers
                     , conduit
@@ -35,7 +38,6 @@ library
                     , mtl
                     , old-locale
                     , resourcet
-                    , retry
                     , safe
                     , text
                     , time
@@ -43,6 +45,7 @@ library
                     , xml-conduit
                     , xml-types
                     , vector
+                    , void
 
   ghc-options:   -Wall -O2 -fwarn-incomplete-patterns -Werror -fwarn-tabs -fwarn-incomplete-record-updates -fwarn-unused-do-bind -fwarn-incomplete-uni-patterns
   default-language:    Haskell2010

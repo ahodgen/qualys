@@ -1,18 +1,58 @@
-{-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, RankNTypes #-}
 -- | Internal functions intended only to be used by this package. API stability
 --   not guaranteed!
-module Qualys.Internal where
+module Qualys.Internal
+    (
+      QualysT (..)
+    , liftReader
+    , Parse
+    -- * Configuration
+    , QualysConf (..)
+    , QualysPlatform (..)
+    , qualysUSPlatform1
+    , qualysUSPlatform2
+    , qualysEUPlatform
+    , qualysPrivateCloudPlatform
+    -- * Session data
+    , QualysSess (..)
+    , qualysHeaders
+    , qualTimeout
+    , qualUser
+    , qualPass
+    , qualPlatform
+    -- * Convenience functions for XML processing
+    , parseBool
+    , parseUInt
+    , parseBound
+    , parseSev
+    , parseDate
+    , requireTagNoAttr
+    , requireDef
+    , requireWith
+    , optionalWith
+    , parseDiscard
+    )where
 
 import           Control.Applicative
-import           Control.Monad.State
+import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString as B
+import           Data.Conduit (ConduitM)
+import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
+import           Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Read as T
+import           Data.Time.Clock  (UTCTime)
+import           Data.Time.Format (parseTime)
+import           Data.XML.Types
 import           Network.HTTP.Client
-import Network.HTTP.Types.Header (HeaderName)
+import           Network.HTTP.Types.Header (HeaderName)
+import           System.Locale (defaultTimeLocale)
+import           Text.XML.Stream.Parse
 
 -- | Qualys transformer, which carries around a session and returns an @a@.
-newtype QualysT m a = QualysT { unQualysT :: StateT QualysSess m a}
+newtype QualysT m a = QualysT { unQualysT :: ReaderT QualysSess m a}
                       deriving (Functor, Applicative, Monad)
 
 instance MonadIO m => MonadIO (QualysT m) where
@@ -24,8 +64,11 @@ instance MonadThrow m => MonadThrow (QualysT m) where
 instance MonadTrans QualysT where
   lift = QualysT . lift
 
-liftState :: Monad m => StateT QualysSess m a -> QualysT m a
-liftState = QualysT
+liftReader :: Monad m => ReaderT QualysSess m a -> QualysT m a
+liftReader = QualysT
+
+-- | Type synonym to keep signatures short
+type Parse m a = (MonadIO m, MonadThrow m) => ConduitM Event o m a
 
 -- | Qualys Configuration
 data QualysConf = QualysConf
@@ -63,7 +106,6 @@ qualysHeaders = [ ("User-Agent",       "NCSA_Mosaic/2.0" )
 
 data QualysSess = QualysSess
                 { qConf      :: QualysConf -- ^ Qualys Configuration
-                , qCookieJar :: CookieJar  -- ^ Cookie Jar
                 , qManager   :: Manager    -- ^ HTTP Manager
                 }
 
@@ -82,3 +124,66 @@ qualPass = qcPassword . qConf
 -- | Grab the platform from a @QualysSess@.
 qualPlatform:: QualysSess -> String
 qualPlatform = unQualysPlatform . qcPlatform . qConf
+
+-- | Parse a text into a Bool.
+parseBool :: Text -> Maybe Bool
+parseBool "0"     = Just False
+parseBool "false" = Just False
+parseBool "1"     = Just True
+parseBool "true"  = Just True
+parseBool _   = Nothing
+
+-- | Parse text into an unsigned integral.
+parseUInt :: Integral a => Text -> Maybe a
+parseUInt x = case T.decimal x of
+    Right (n,"") -> Just n
+    _            -> Nothing
+
+-- | Parse text to an int bound by a min and max.
+parseBound :: Integral a => a -> a -> Text -> Maybe a
+parseBound mn mx x = check =<< parseUInt x
+  where
+    check n
+        | n >= mn && n <= mx = Just n
+        | otherwise          = Nothing
+
+-- Parse a text value into a severity, enforcing the correct range.
+parseSev :: Integral a => Text -> Maybe a
+parseSev = parseBound 0 5
+
+-- | Parse a text value into UTCTime
+parseDate :: Text -> Maybe UTCTime
+parseDate = parseTime defaultTimeLocale "%FT%T%QZ" . T.unpack
+
+-- | Require a tag with no attributes set.
+requireTagNoAttr :: (MonadThrow m) => Name -> ConduitM Event o m a ->
+                    ConduitM Event o m a
+requireTagNoAttr x = force err . tagNoAttr x
+  where
+    err = "Tag '" <> show x <> "' required!"
+
+requireDef :: Show a => a -> ConduitM Event o m (Maybe a) ->
+                ConduitM Event o m a
+requireDef d i = do
+    x <- i
+    return $ fromMaybe d x
+
+-- | Required value with a parsing function.
+requireWith :: Show a => (a -> Maybe b) -> ConduitM Event o m (Maybe a) ->
+               ConduitM Event o m b
+requireWith p i = do
+    x <- i
+    case join $ fmap p x of
+        Nothing -> fail $ "Bad value '" <> show x <> "'"
+        Just y  -> return y
+
+-- | Optional value with a parsing function.
+optionalWith :: MonadThrow m => (a -> Maybe b) ->
+                ConduitM Event o m (Maybe a) -> ConduitM Event o m (Maybe b)
+optionalWith f v = do
+    x <- v
+    return $ f =<< x
+
+-- | Convenience function for ignoring an element and content
+parseDiscard :: (MonadThrow m) => Name -> ConduitM Event o m ()
+parseDiscard x = void $ tagNoAttr x contentMaybe
