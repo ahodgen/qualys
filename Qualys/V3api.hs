@@ -67,9 +67,26 @@ newtype CritField a = CF Text
 
 data Criteria = Crit
     { field    :: Text
-    , operator :: Text
+    , operator :: Operator
     , criteria :: Text
     } deriving Show
+
+data Operator = Equals
+              | NotEquals
+              | Lesser
+              | Greater
+              | InList
+              | Contains
+              | None
+
+instance Show Operator where
+    show Equals    = "EQUALS"
+    show NotEquals = "NOT EQUALS"
+    show Lesser    = "LESSER"
+    show Greater   = "GREATER"
+    show InList    = "IN"
+    show Contains  = "CONTAINS"
+    show None      = "NONE"
 
 -- | Render 'Criteria' to XML.
 critToXml :: [Criteria] -> [Node]
@@ -85,9 +102,10 @@ critToXml xs =
     toCrit x =
         NodeElement Element
             { elementName = "Criteria"
-            , elementAttributes = M.fromList [ ("field",    field x)
-                                             , ("operator", operator x)
-                                             ]
+            , elementAttributes = M.fromList
+                [ ("field",    field x)
+                , ("operator", (T.pack . show . operator) x)
+                ]
             , elementNodes = [NodeContent (criteria x)]
             }
 
@@ -129,10 +147,10 @@ instance RenderText Bool where
     renTxt False = "false"
 
 equals :: (Equality a, RenderText a) => CritField a -> a -> Criteria
-equals (CF lab) = Crit lab "EQUALS" . renTxt
+equals (CF lab) = Crit lab Equals . renTxt
 
 notEquals :: (Equality a, RenderText a) => CritField a -> a -> Criteria
-notEquals (CF lab) = Crit lab "NOT EQUALS" . renTxt
+notEquals (CF lab) = Crit lab NotEquals . renTxt
 
 class Ordered a
 
@@ -140,10 +158,10 @@ instance Ordered Int
 instance Ordered UTCTime
 
 lesser :: (Ordered a, RenderText a) => CritField a -> a -> Criteria
-lesser (CF lab) = Crit lab "LESSER" . renTxt
+lesser (CF lab) = Crit lab Lesser . renTxt
 
 greater :: (Ordered a, RenderText a) => CritField a -> a -> Criteria
-greater (CF lab) = Crit lab "GREATER" . renTxt
+greater (CF lab) = Crit lab Greater . renTxt
 
 class InList a
 
@@ -151,13 +169,13 @@ instance InList Integer
 -- instance InList Keyword
 
 inList :: (InList a, RenderText a) => CritField a -> a -> Criteria
-inList (CF lab) = Crit lab "IN" . renTxt
+inList (CF lab) = Crit lab InList . renTxt
 
 contains :: CritField Text -> Text -> Criteria
-contains (CF lab) = Crit lab "CONTAINS"
+contains (CF lab) = Crit lab Contains
 
 none :: CritField () -> Criteria
-none (CF lab) = Crit lab "NONE" ""
+none (CF lab) = Crit lab None ""
 
 v3ApiPath :: String
 v3ApiPath = "/qps/rest/3.0/"
