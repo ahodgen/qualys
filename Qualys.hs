@@ -15,26 +15,27 @@
 -- Example:
 --
 -- @
---  import Network.API.Qualys
+--  import Qualys
 --
 --  myQualysConf :: QualysConf
 --  myQualysConf = defaultQualysConf
 --      { qcPlatform = qualysUSPlatform2
 --      , qcUsername = "myusername"
 --      , qcPassword = "mypassword"
+--      , qcTimeout  = 300
 --      }
 --
 --  main :: IO ()
 --  main = do
---      withQualys myQualysConf $ do
---          xs <- getQualysKnowledgeBase defKnowledgeBaseOpts
+--      runQualysT myQualysConf $ do
+--          xs <- getQualysKnowledgeBase []
 --          print xs
 -- @
 
 module Qualys
     (
     -- * Functions
-      withQualysT
+      runQualysT
     -- * Types
     , QualysT
     -- * Configuration
@@ -66,8 +67,8 @@ import Qualys.WasScan
 import Qualys.WasWebApp
 
 -- | Given a 'QualysConf', run some action(s) against Qualys.
-withQualysT :: MonadIO m => QualysConf -> QualysT m a -> m a
-withQualysT c f = do
+runQualysT :: MonadIO m => QualysConf -> QualysT m a -> m a
+runQualysT c f = do
     manager <- liftIO $ newManager tlsManagerSettings
     runReaderT (unQualysT f) (sess manager)
   where
