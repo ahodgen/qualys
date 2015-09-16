@@ -1,9 +1,11 @@
+-- | Types for Web Application Scanning
 module Qualys.Types.Was where
 
 import           Data.Text (Text)
 import qualified Data.ByteString as B
 import           Data.Time (UTCTime)
 
+-- | Was scan
 data WasScan = WasScan
     { wsId          :: Int          -- ^ Scan ID
     , wsName        :: Maybe Text   -- ^ Scan name
@@ -29,11 +31,13 @@ data WasScan = WasScan
     , wsIgs         :: Maybe [WsIg]
     } deriving Show
 
+-- | Was scan profile
 data WsScanProfile = WsScanProfile
     { wspId   :: Maybe Int  -- ^ ID of the option profile
     , wspName :: Maybe Text -- ^ Option profile name
     } deriving Show
 
+-- | Was scan target
 data WsTarget = WsTarget
     { wstWebApps   :: Maybe [WsWebApp]
     , wstTags      :: Maybe [WsTag]
@@ -44,27 +48,33 @@ data WsTarget = WsTarget
     , wstProxy     :: Maybe WsProxy -- ^ Proxy settings
     } deriving Show
 
+-- | Web application
 data WsWebApp = WsWebApp
     { wsWebAppId   :: Maybe Int
     , wsWebAppName :: Maybe Text
     , wsWebAppUrl  :: Maybe Text
     } deriving Show
 
+-- | Tag data
 data WsTag = WsTag
     { wstId   :: Int
     , wstName :: Maybe Text
     } deriving Show
+
+-- | Authentication record
 data WsAuthRec = WsAuthRec
     { wsaId   :: Maybe Int
     , wsaName :: Maybe Text
     } deriving Show
 
+-- | Proxy information
 data WsProxy = WsProxy
     { wsprId   :: Maybe Int  -- ^ Proxy ID for scanning the app
     , wsprName :: Maybe Text -- ^ Proxy name
     , wsprUrl  :: Maybe Text -- ^ Proxy URL
     } deriving Show
 
+-- | User data
 data WsUser = WsUser
     { wsuId        :: Maybe Int
     , wsuUsername  :: Maybe Text
@@ -72,6 +82,7 @@ data WsUser = WsUser
     , wsuLastName  :: Maybe Text
     } deriving Show
 
+-- | Web scan summary
 data WsSummary = WsSummary
     { wssCrawlDur :: Maybe Int
     , wssTestDur  :: Maybe Int
@@ -82,13 +93,15 @@ data WsSummary = WsSummary
     , wssOs       :: Maybe Text
     } deriving Show
 
+-- | Web scan stats
 data WsStat = WsStat
-    { wssGlobal :: Maybe WsGlobalStat
-    , wssGroup  :: Maybe [WsNameStat]
-    , wssOwasp  :: Maybe [WsNameStat]
-    , wssWasc   :: Maybe [WsNameStat]
+    { wssGlobal :: Maybe WsGlobalStat -- ^ Global stats
+    , wssGroup  :: Maybe [WsNameStat] -- ^ Group stats
+    , wssOwasp  :: Maybe [WsNameStat] -- ^ OWASP stats ()
+    , wssWasc   :: Maybe [WsNameStat] -- ^ WASC stats
     } deriving Show
 
+-- | Web scan global stats
 data WsGlobalStat = WsGlobalStat
     { wsgVulnTotal :: Int
     , wsgVulnLev5  :: Int
@@ -110,6 +123,7 @@ data WsGlobalStat = WsGlobalStat
     , wsgIgsLev1   :: Int
     } deriving Show
 
+-- | Named stat
 data WsNameStat = WsNameStat
     { wsnName  :: Text
     , wsnTotal :: Int
@@ -120,6 +134,7 @@ data WsNameStat = WsNameStat
     , wsnLev1  :: Int
     } deriving Show
 
+-- | Scan Result
 data WsScanResult = WsScanResult
     { wsrQid     :: Int
     , wsrTitle   :: Text
@@ -129,39 +144,44 @@ data WsScanResult = WsScanResult
     , wsrInsts   :: Maybe [WsInstance]
     } deriving Show
 
+-- | Instance
 data WsInstance = WsInstance
     { wiAuth     :: Bool
     , wiForm     :: Maybe Text
     , wiPayloads :: Maybe [WsPayload]
     } deriving Show
 
+-- | Payload
 data WsPayload = WsPayload
     { wpPayload :: Text
     , wpResult  :: B.ByteString
     } deriving Show
 
+-- | Information gathered
 data WsIg = WsIg
     { wigQid   :: Int
     , wigTitle :: Text
     , wigData  :: B.ByteString
     } deriving Show
 
+-- | Scanner appliance
 data ScanAppl = ScanAppl
     { saType         :: Text
     , saFriendlyName :: Maybe Text
     } deriving Show
 
+-- | Web application
 data WebApp = WebApp
-    { waId :: Int
-    , waName :: Maybe Text
-    , waUrl  :: Maybe Text
-    , waOs   :: Maybe Text
-    , waOwner :: Maybe WsUser
-    , waScope :: Maybe Text
-    , waSubDomain :: Maybe Text
-    , waDomains :: Maybe [Text]
-    , waUris :: Maybe [Text]
-    , waAttrs :: Maybe [(Text,Text)]
+    { waId         :: Int
+    , waName       :: Maybe Text
+    , waUrl        :: Maybe Text
+    , waOs         :: Maybe Text
+    , waOwner      :: Maybe WsUser
+    , waScope      :: Maybe Text
+    , waSubDomain  :: Maybe Text
+    , waDomains    :: Maybe [Text]
+    , waUris       :: Maybe [Text]
+    , waAttrs      :: Maybe [(Text,Text)]
     , waDefProfile :: Maybe WsScanProfile
     , waDefScanner :: Maybe ScanAppl
     , waScanLocked :: Maybe Bool
@@ -180,7 +200,7 @@ data WebApp = WebApp
     , waTags       :: Maybe [WsTag]
     , waComments   :: Maybe [Comment]
     , waIsSched    :: Maybe Bool
-    , waLastScan   :: Maybe WasScan
+    , waLastScan   :: Maybe WasScanInfo
     , waCreatedBy  :: Maybe WsUser
     , waCreateDate :: Maybe UTCTime
     , waUpdateBy   :: Maybe WsUser
@@ -190,16 +210,25 @@ data WebApp = WebApp
     , waConfig     :: Maybe WaConfig
     } deriving Show
 
+-- | Url entry
 data UrlEntry = UrlText  Text
               | UrlRegex Text
               deriving Show
 
+-- | Comment
 data Comment = Comment
     { cmContent :: Text
     , cmAuthor  :: Maybe WsUser
     , cmDate    :: Maybe UTCTime
     } deriving Show
 
+-- | Scan Info
+data WasScanInfo = WasScanInfo
+    { wsiId   :: Int
+    , wsiName :: Maybe Text
+    } deriving Show
+
+-- | Web app config
 data WaConfig = CancelAfterN Int
               | CancelScanAt Text
               deriving Show
