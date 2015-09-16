@@ -52,7 +52,7 @@ parseWebApp = tagName "WebApp" ignoreAttrs $ \_ -> WebApp
     <*> parseV3List "tags" parseTag
     <*> parseV3List "comments" (tagNoAttr "Comment" parseComment)
     <*> optionalWith parseBool (tagNoAttr "isScheduled" content)
-    <*> (join <$> tagNoAttr "lastScan" parseWasScan)
+    <*> parseWasScanInfo
     <*> tagNoAttr "createdBy" parseUser
     <*> optionalWith parseDate (tagNoAttr "createdDate" content)
     <*> tagNoAttr "updatedBy" parseUser
@@ -72,6 +72,9 @@ parseWebApp = tagName "WebApp" ignoreAttrs $ \_ -> WebApp
         return $ case x of
             (Just "true") -> UrlRegex y
             _             -> UrlText y
+    parseWasScanInfo = tagNoAttr "lastScan" $ WasScanInfo
+        <$> requireWith parseUInt (tagNoAttr "id" content)
+        <*> tagNoAttr "name" content
 
 parseComment :: (MonadThrow m, MonadIO m) => ConduitM Event o m Comment
 parseComment = Comment
