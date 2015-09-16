@@ -80,6 +80,7 @@ wssFiltWebAppTags = CF "webApp.tags"
 wssFiltWebAppTagsId :: CritField Int
 wssFiltWebAppTagsId = CF "webApp.tags.id"
 
+-- | Filter by scan reference
 wssFiltReference :: CritField Text
 wssFiltReference = CF "reference"
 
