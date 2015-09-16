@@ -36,7 +36,6 @@ import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString as B
 import           Data.Conduit (ConduitM)
-import           Data.Maybe (fromMaybe)
 import           Data.Monoid ((<>))
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -62,6 +61,8 @@ instance MonadThrow m => MonadThrow (QualysT m) where
 instance MonadTrans QualysT where
   lift = QualysT . lift
 
+-- | Lifts an action that works on @ReaderT@ to one that works on
+-- @QualysT@.
 liftReader :: Monad m => ReaderT QualysSess m a -> QualysT m a
 liftReader = QualysT
 
@@ -73,6 +74,7 @@ data QualysConf = QualysConf
     , qcTimeOut  :: Int            -- ^ Timeout (in seconds)
     } deriving Show
 
+-- | Qualys platform to send requests to.
 newtype QualysPlatform = QualysPlatform { unQualysPlatform :: String }
     deriving Show
 
@@ -93,12 +95,14 @@ qualysEUPlatform = QualysPlatform "qualysapi.qualys.eu"
 qualysPrivateCloudPlatform :: String -> QualysPlatform
 qualysPrivateCloudPlatform = QualysPlatform . (<>) "qualysapi."
 
+-- | Required Qualys headers
 qualysHeaders :: [(HeaderName, B.ByteString)]
-qualysHeaders = [ ("User-Agent",       "NCSA_Mosaic/2.0" )
-                , ("X-Requested-With", "Shrubbery" )
+qualysHeaders = [ ("User-Agent",       "Qualys/Haskell" )
+                , ("X-Requested-With", "Irrelevant" )
                 , ("Content-Type",     "text/xml")
                 ]
 
+-- | Qualys session. Contains configuation and @Manager@.
 data QualysSess = QualysSess
                 { qConf      :: QualysConf -- ^ Qualys Configuration
                 , qManager   :: Manager    -- ^ HTTP Manager
@@ -142,7 +146,7 @@ parseBound mn mx x = check =<< parseUInt x
         | n >= mn && n <= mx = Just n
         | otherwise          = Nothing
 
--- Parse a text value into a severity, enforcing the correct range.
+-- | Parse a text value into a severity, enforcing the correct range.
 parseSev :: Integral a => Text -> Maybe a
 parseSev = parseBound 0 5
 
