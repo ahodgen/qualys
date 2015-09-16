@@ -18,6 +18,8 @@ library
     Qualys.Cookbook
     Qualys.Cookbook.KnowledgeBase
     Qualys.Cookbook.HostListDetection
+    Qualys.Cookbook.Options
+    Qualys.Cookbook.WasWebApp
     Qualys.HostListDetection
     Qualys.Internal
     Qualys.KnowledgeBase

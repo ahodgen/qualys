@@ -5,7 +5,6 @@ module Qualys.Internal
     (
       QualysT (..)
     , liftReader
-    , Parse
     -- * Configuration
     , QualysConf (..)
     , QualysPlatform (..)
@@ -27,7 +26,6 @@ module Qualys.Internal
     , parseSev
     , parseDate
     , requireTagNoAttr
-    , requireDef
     , requireWith
     , optionalWith
     , parseDiscard
@@ -66,9 +64,6 @@ instance MonadTrans QualysT where
 
 liftReader :: Monad m => ReaderT QualysSess m a -> QualysT m a
 liftReader = QualysT
-
--- | Type synonym to keep signatures short
-type Parse m a = (MonadIO m, MonadThrow m) => ConduitM Event o m a
 
 -- | Qualys Configuration
 data QualysConf = QualysConf
@@ -161,12 +156,6 @@ requireTagNoAttr :: (MonadThrow m) => Name -> ConduitM Event o m a ->
 requireTagNoAttr x = force err . tagNoAttr x
   where
     err = "Tag '" <> show x <> "' required!"
-
-requireDef :: Show a => a -> ConduitM Event o m (Maybe a) ->
-                ConduitM Event o m a
-requireDef d i = do
-    x <- i
-    return $ fromMaybe d x
 
 -- | Required value with a parsing function.
 requireWith :: Show a => (a -> Maybe b) -> ConduitM Event o m (Maybe a) ->
