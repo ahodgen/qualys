@@ -1,12 +1,14 @@
 {-# LANGUAGE OverloadedStrings, FlexibleInstances #-}
 {-# OPTIONS_GHC -Wwarn #-}
+-- | Qualys V3 API Handling
 module Qualys.V3api
     (
+      -- * Types
       V3Options (..)
     , V3Resp (..)
     , V3ErrDetail (..)
     , CritField (..)
-      -- * Filters
+      -- * Filter Operations
     , equals
     , notEquals
     , lesser
@@ -16,9 +18,9 @@ module Qualys.V3api
     , none
       -- * Low-level functions
       -- |
-      -- This section contains functions for fetching results from the
-      -- Qualys V3 API. You shouldn't need to use these unless you are extending
-      -- the API or need low-level access.
+      -- This section contains low-level functions for the V3 API.
+      -- You shouldn't need these unless you are extending this library or
+      -- need low-level access.
     , buildV3ApiUrl
     , fetchV3
     , processV3With
@@ -45,6 +47,7 @@ import           Text.XML.Stream.Parse
 
 import Qualys.Internal
 
+-- | V3 response from Qualys
 data V3Resp = V3Resp
     { v3rCode    :: Text              -- ^ Response code
     , v3rErrDet  :: Maybe V3ErrDetail -- ^ Error details
@@ -53,33 +56,40 @@ data V3Resp = V3Resp
     , v3rLastId  :: Maybe Int         -- ^ Last Id of records in response
     } deriving Show
 
+-- | Error Details
 data V3ErrDetail = V3ErrDetail
     { edMess    :: Text       -- ^ Error message
     , edResol   :: Maybe Text -- ^ Error resolution
     , edErrCode :: Maybe Int  -- ^ Qualys internal error code
     } deriving Show
 
+-- | V3 API options
 data V3Options = V3Options
-    { filt :: [Criteria]
+    { filt :: [Criteria] -- ^ Filters
     }
 
+-- | Criteria field. It contains the textual representation of the option
+-- and a phantom type @a@ to indicate what type of value it expects.
 newtype CritField a = CF Text
 
+-- | Filter criteria.
 data Criteria = Crit
-    { field    :: Text
-    , operator :: Operator
-    , criteria :: Text
+    { field :: Text      -- ^ Qualys field name (usually listed under \"Input\"
+                         --   in the API docs).
+    , oper  :: Operation -- ^ Operator
+    , value :: Text      -- ^ Text representation of the value
     } deriving Show
 
-data Operator = Equals
-              | NotEquals
-              | Lesser
-              | Greater
-              | InList
-              | Contains
-              | None
+-- | Filter operations
+data Operation = Equals
+               | NotEquals
+               | Lesser
+               | Greater
+               | InList
+               | Contains
+               | None
 
-instance Show Operator where
+instance Show Operation where
     show Equals    = "EQUALS"
     show NotEquals = "NOT EQUALS"
     show Lesser    = "LESSER"
@@ -104,11 +114,12 @@ critToXml xs =
             { elementName = "Criteria"
             , elementAttributes = M.fromList
                 [ ("field",    field x)
-                , ("operator", (T.pack . show . operator) x)
+                , ("operator", (T.pack . show . oper) x)
                 ]
-            , elementNodes = [NodeContent (criteria x)]
+            , elementNodes = [NodeContent (value x)]
             }
 
+-- | Turn options into an XML ByteString
 v3OptXml :: V3Options -> BL.ByteString
 v3OptXml x = renderLBS def Document
     { documentPrologue = Prologue [] Nothing []
@@ -123,13 +134,7 @@ v3OptXml x = renderLBS def Document
             , elementNodes = critToXml (filt x)
             }
 
-class Equality a
-
-instance Equality Text
-instance Equality Int
-instance Equality UTCTime
-instance Equality Bool
-
+-- | Class for converting filter values to Text suitable for Qualys.
 class RenderText a where
     renTxt :: a -> Text
 
@@ -146,48 +151,68 @@ instance RenderText Bool where
     renTxt True  = "true"
     renTxt False = "false"
 
+-- | Class for equality operations on filters
+class Equality a
+
+instance Equality Text
+instance Equality Int
+instance Equality UTCTime
+instance Equality Bool
+
+-- | Test if the field equals the value.
 equals :: (Equality a, RenderText a) => CritField a -> a -> Criteria
 equals (CF lab) = Crit lab Equals . renTxt
 
+-- | Test if the field does not equal the value.
 notEquals :: (Equality a, RenderText a) => CritField a -> a -> Criteria
 notEquals (CF lab) = Crit lab NotEquals . renTxt
 
+-- | Class for ordered operations on filters
 class Ordered a
 
 instance Ordered Int
 instance Ordered UTCTime
 
+-- | Test if the field is less than the value.
 lesser :: (Ordered a, RenderText a) => CritField a -> a -> Criteria
 lesser (CF lab) = Crit lab Lesser . renTxt
 
+-- | Test if the field is greater than the value.
 greater :: (Ordered a, RenderText a) => CritField a -> a -> Criteria
 greater (CF lab) = Crit lab Greater . renTxt
 
+-- | Class for list membership.
 class InList a
 
-instance InList Integer
--- instance InList Keyword
+instance InList Int
 
+-- | Test if the field contains a value in the list.
 inList :: (InList a, RenderText a) => CritField a -> a -> Criteria
 inList (CF lab) = Crit lab InList . renTxt
 
+-- | Test if the field contains the value.
 contains :: CritField Text -> Text -> Criteria
 contains (CF lab) = Crit lab Contains
 
+-- | Test if the field contains no data.
 none :: CritField () -> Criteria
 none (CF lab) = Crit lab None ""
 
+-- | Base path for the V3 API.
 v3ApiPath :: String
 v3ApiPath = "/qps/rest/3.0/"
 
+-- | Build a V3 URL given a relative path under the base path.
 buildV3ApiUrl :: MonadIO m => String -> QualysT m String
 buildV3ApiUrl x = do
     sess <- liftReader ask
     return $ "https://" <> qualPlatform sess <> v3ApiPath <> x
 
--- XXX: How is rate-limiting done in V3? Couldn't find documentation.
+-- | Given a relative path and options, send a request and return the
+-- response from Qualys.
 fetchV3 :: (MonadIO m, MonadThrow m) => String -> Maybe V3Options ->
                         QualysT m (Response BL.ByteString)
+-- XXX: How is rate-limiting done in V3? Couldn't find documentation.
 fetchV3 p opt = do
     sess <- liftReader ask
     url <- buildV3ApiUrl p
@@ -216,6 +241,8 @@ processV3With p opt f = do
     liftIO $ print res
     parseLBS def (responseBody res) $$ parseSvcResp f
 
+-- | Parse the base ServiceResponse, and pass the <data> section to 'f' for
+-- further parsing.
 parseSvcResp :: (MonadIO m, MonadThrow m) => ConduitM Event o m a ->
                         ConduitM Event o m (V3Resp, Maybe a)
 parseSvcResp f = force "Blah"$ tagName "ServiceResponse" ignoreAttrs $ \_ -> (,)
@@ -228,6 +255,7 @@ parseSvcResp f = force "Blah"$ tagName "ServiceResponse" ignoreAttrs $ \_ -> (,)
         )
     <*> tagNoAttr "data" f
 
+-- | Parse the error detail
 parseErrDetail :: (MonadIO m, MonadThrow m) => ConduitM Event o m V3ErrDetail
 parseErrDetail = V3ErrDetail
     <$> requireTagNoAttr "errorMessage" content

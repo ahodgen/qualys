@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings, FlexibleInstances #-}
+-- | Qualys V2 API Handling
 module Qualys.V2api
     (
       -- * Options Handling
@@ -48,6 +49,7 @@ import           Text.XML.Stream.Parse
 
 import          Qualys.Internal
 
+-- | Qualys V2 Option
 type Param = (B.ByteString, B.ByteString)
 
 -- | A class for converting texty type option values into a ByteString.
@@ -105,14 +107,17 @@ parseWarning = tagNoAttr "WARNING" $ V2Resp
     <*> tagNoAttr "TEXT" content
     <*> tagNoAttr "URL"  content
 
+-- | Base path for the V2 API.
 v2ApiPath :: String
 v2ApiPath = "/api/2.0/fo/"
 
+-- | Build a V2 URL given a relative path under the base path.
 buildV2ApiUrl :: MonadIO m => String -> QualysT m String
 buildV2ApiUrl x = do
     sess <- liftReader ask
     return $ "https://" <> qualPlatform sess <> v2ApiPath <> x
 
+-- | Calculate the amount of time to delay if we are rate-limited.
 rateLimitDelay :: ResponseHeaders -> IO Int
 rateLimitDelay xs =
     case rlExceed <|> (clExcDelay =<< clExceed) of
@@ -134,6 +139,7 @@ rateLimitDelay xs =
         Just (y,"") -> Just y
         _           -> Nothing
 
+-- | Rate-limit the request, if needed.
 rateLimit :: Request -> QualysSess -> IO (Response BL.ByteString)
 rateLimit req sess = handle rlErr $ httpLbs req (qManager sess)
   where
