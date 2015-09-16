@@ -1,0 +1,52 @@
+-- | Examples of using "Qualys.WasWebApp". This is a documentation-only
+--   module
+module Qualys.Cookbook.WasWebApp
+    (
+    -- $example1
+    ) where
+
+-- $example1
+--
+-- Search for some WebApps, get their details and write screenshots
+-- with the app ID as the filename.
+--
+-- @
+-- {-\# LANGUAGE OverloadedStrings \#-}
+--
+-- import           Prelude hiding (mapM)
+-- import           Control.Monad.IO.Class (liftIO)
+-- import qualified Data.ByteString as B
+-- import           Data.Foldable (forM_)
+-- import           Data.Maybe (fromMaybe, catMaybes)
+-- import           Data.Traversable (mapM)
+--
+-- import Qualys
+-- import Qualys.V3api
+--
+-- -- Options for the WebApp search
+-- opts :: V3Options
+-- opts = V3Options
+--         -- Get apps where the app name contains \"test\".
+--         { filt = [ wasFiltName `contains` "test" ] }
+--
+-- main :: IO ()
+-- main = do
+--     -- Configuration for Qualys
+--     let conf = QualysConf
+--             { qcPlatform = qualysUSPlatform2
+--             , qcUsername = "myusername"
+--             , qcPassword = "mypassword"
+--             , qcTimeOut  = 300
+--             }
+--     runQualysT conf $ do
+--         -- Search for web apps
+--         xs <- searchWebApps $ Just opts
+--         -- Get the details for each web app
+--         ys <- mapM (getWebAppDetail . waId) $ fromMaybe [] xs
+--         -- Write the screenshots
+--         liftIO $ mapM_ writeScreenShot (catMaybes ys)
+--   where
+--     -- Write out a screenshot with the form \"appid.png\".
+--     writeScreenShot x = forM_ (waScreenshot x)
+--                             (B.writeFile (show (waId x) ++ ".png"))
+-- @

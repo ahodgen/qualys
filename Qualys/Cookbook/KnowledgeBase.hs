@@ -1,8 +1,6 @@
--- | Examples of using "Qualys.Knowledgebase". This is a documentation-only
+--  Examples of using "Qualys.Knowledgebase". This is a documentation-only
 --   module.
 module Qualys.Cookbook.KnowledgeBase (
--- * Using options
-
 -- $exampleOption1
 
 -- $exampleOption2
@@ -12,7 +10,6 @@ module Qualys.Cookbook.KnowledgeBase (
 -- $exampleEach1
 
 -- * Working with a bunch of entries
-
 
 ) where
 
@@ -43,7 +40,7 @@ module Qualys.Cookbook.KnowledgeBase (
 --      let opts = [ KboModAfter (twodaysago now)
 --                 , kboDetail \"All\"
 --                 ]
---      withQualys myConf $ runKnowledgeBase opts (liftIO . print)
+--      runQualysT myConf $ runKnowledgeBase opts (liftIO . print)
 --    where
 --      twodaysago = addUTCTime $ 2 * (-86400)
 -- @
@@ -74,7 +71,7 @@ module Qualys.Cookbook.KnowledgeBase (
 --      let opts = [ kboPubAfter  (daysago 4 now)
 --                 , kboPubBefore (daysago 2 now)
 --                 ]
---      withQualys myConf $ runKnowledgeBase opts (liftIO . print)
+--      runQualysT myConf $ runKnowledgeBase opts (liftIO . print)
 --     where
 --       daysago x = addUTCTime $ x * (-86400)
 -- @
@@ -130,7 +127,7 @@ module Qualys.Cookbook.KnowledgeBase (
 --              , qkbDetail = Just All
 --              }
 --      dbh <- startDb
---      withQualys opts $ runQualysKb $ dbWrite dbh
+--      runQualysT opts $ runQualysKb $ dbWrite dbh
 --      dbEnd dbh
 --    where
 --      onedayago = addUTCTime . realToFrac (-86400)
