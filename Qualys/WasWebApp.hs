@@ -29,7 +29,6 @@ module Qualys.WasWebApp
 
 import           Control.Monad (join)
 import           Data.Monoid ((<>))
-import           Data.Proxy
 import           Data.Text (Text)
 import           Data.Time (UTCTime)
 
@@ -39,53 +38,53 @@ import           Qualys.Types.Was
 import           Qualys.V3api
 
 -- | Filter by WebApp ID.
-wasFiltId :: (Text, Proxy Int)
-wasFiltId = ("id", Proxy)
+wasFiltId :: CritField Int
+wasFiltId = CF "id"
 
 -- | Filter by WebApp name.
-wasFiltName :: (Text, Proxy Text)
-wasFiltName = ("name", Proxy)
+wasFiltName :: CritField Text
+wasFiltName = CF "name"
 
 -- | Filter by the WebApp URL.
-wasFiltUrl :: (Text, Proxy Text)
-wasFiltUrl = ("url", Proxy)
+wasFiltUrl :: CritField Text
+wasFiltUrl = CF "url"
 
 -- | Filter if no tags.
-wasFiltTags :: (Text, Proxy ())
-wasFiltTags = ("tags", Proxy)
+wasFiltTags :: CritField ()
+wasFiltTags = CF "tags"
 
 -- | Filter by tag name.
-wasFiltTagName :: (Text, Proxy Text)
-wasFiltTagName = ("tags.name", Proxy)
+wasFiltTagName :: CritField Text
+wasFiltTagName = CF "tags.name"
 
 -- | Filter by tag ID.
-wasFiltTagId :: (Text, Proxy Int)
-wasFiltTagId = ("tags.id", Proxy)
+wasFiltTagId :: CritField Int
+wasFiltTagId = CF "tags.id"
 
 -- | Filter by creation date/time.
-wasFiltCreateDate :: (Text, Proxy UTCTime)
-wasFiltCreateDate = ("createdDate", Proxy)
+wasFiltCreateDate :: CritField UTCTime
+wasFiltCreateDate = CF "createdDate"
 
 -- | Filter by update date/time.
-wasFiltUpdateDate :: (Text, Proxy UTCTime)
-wasFiltUpdateDate = ("updatedDate", Proxy)
+wasFiltUpdateDate :: CritField UTCTime
+wasFiltUpdateDate = CF "updatedDate"
 
 -- | Filter if the WebApp is scheduled (True) or not (False).
-wasFiltIsSched :: (Text, Proxy Bool)
-wasFiltIsSched = ("isScheduled", Proxy)
+wasFiltIsSched :: CritField Bool
+wasFiltIsSched = CF "isScheduled"
 
 -- | Filter if the WebApp has been scanned.
-wasFiltIsScanned :: (Text, Proxy Bool)
-wasFiltIsScanned = ("isScanned", Proxy)
+wasFiltIsScanned :: CritField Bool
+wasFiltIsScanned = CF "isScanned"
 
 -- | Filter by the WebApp's last scanned date/time.
-wasFiltLastScan :: (Text, Proxy UTCTime)
-wasFiltLastScan = ("lastScan.date", Proxy)
+wasFiltLastScan :: CritField UTCTime
+wasFiltLastScan = CF "lastScan.date"
 
 -- | Filter by the WebApp's last scan status (SUBMITTED, RUNNING, FINISHED,
 --   ERROR or CANCELLED)
-wasFiltLastScanStatus :: (Text, Proxy Text)
-wasFiltLastScanStatus = ("lastScan.status", Proxy)
+wasFiltLastScanStatus :: CritField Text
+wasFiltLastScanStatus = CF "lastScan.status"
 
 -- | Search for WebApps. If no options are given it will return all WebApps
 --   in the subscription.
