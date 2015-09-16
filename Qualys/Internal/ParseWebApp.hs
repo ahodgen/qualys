@@ -57,10 +57,12 @@ parseWebApp = tagName "WebApp" ignoreAttrs $ \_ -> WebApp
     <*> optionalWith parseDate (tagNoAttr "createdDate" content)
     <*> tagNoAttr "updatedBy" parseUser
     <*> optionalWith parseDate (tagNoAttr "updatedDate" content)
-    <*> optionalWith (Just . TE.encodeUtf8) (tagNoAttr "screenshot" content)
+    <*> optionalWith decodeScrSh (tagNoAttr "screenshot" content)
     <*> tagNoAttr "proxy" parseProxy
     <*> (join <$> tagNoAttr "config" parseConfig)
   where
+    -- Decode screenshot leniently, since Qualys doesn't seem to pad base64.
+    decodeScrSh = Just . B64.decodeLenient . TE.encodeUtf8
     parseDomain = tagNoAttr "Domain" content
     parseUri    = tagNoAttr "Url" content
     parseAttr :: (MonadThrow m) => ConduitM Event o m (Maybe (Text,Text))
