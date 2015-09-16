@@ -8,6 +8,7 @@ import           Control.Applicative hiding (many)
 import           Control.Monad (join)
 import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Trans.Resource (MonadThrow)
+import qualified Data.ByteString.Base64.URL as B64
 import           Data.Conduit (ConduitM)
 import           Data.Text (Text)
 import qualified Data.Text.Encoding as TE
@@ -16,7 +17,6 @@ import           Text.XML.Stream.Parse
 
 import           Qualys.Internal
 import           Qualys.Internal.ParseWasCommon
-import           Qualys.Internal.ParseWasScan
 import           Qualys.Types.Was
 
 parseWebApps :: (MonadIO m, MonadThrow m) => ConduitM Event o m [WebApp]
