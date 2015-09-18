@@ -2,10 +2,10 @@
 module Qualys.Internal.ParseWasCommon
     ( parseProfile
     , parseTag
-    , parseAuthRec
     , parseProxy
     , parseUser
     , parseScanAppl
+    , parseComment
     , parseV3List
     ) where
 
@@ -30,11 +30,6 @@ parseTag = tagNoAttr "Tag" $ WsTag
     <$> requireWith parseUInt (tagNoAttr "id" content)
     <*> tagNoAttr "name" content
 
-parseAuthRec :: (MonadIO m, MonadThrow m) => ConduitM Event o m WsAuthRec
-parseAuthRec = WsAuthRec
-    <$> optionalWith parseUInt (tagNoAttr "id" content)
-    <*> tagNoAttr "name" content
-
 parseProxy :: (MonadIO m, MonadThrow m) => ConduitM Event o m WsProxy
 parseProxy = WsProxy
     <$> optionalWith parseUInt (tagNoAttr "id" content)
@@ -52,6 +47,12 @@ parseScanAppl :: (MonadIO m, MonadThrow m) => ConduitM Event o m ScanAppl
 parseScanAppl = ScanAppl
     <$> requireTagNoAttr "type" content
     <*> tagNoAttr "friendlyName" content
+
+parseComment :: (MonadThrow m, MonadIO m) => ConduitM Event o m Comment
+parseComment = Comment
+    <$> requireTagNoAttr "contents" content
+    <*> tagNoAttr "author" parseUser
+    <*> optionalWith parseDate (tagNoAttr "createdDate" content)
 
 parseV3List :: (MonadIO m, MonadThrow m)
             => Name -- ^ Name of the list

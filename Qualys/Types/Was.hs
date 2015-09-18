@@ -63,8 +63,17 @@ data WsTag = WsTag
 
 -- | Authentication record
 data WsAuthRec = WsAuthRec
-    { wsaId   :: Maybe Int
-    , wsaName :: Maybe Text
+    { wsaId         :: Int
+    , wsaName       :: Maybe Text
+    , wsaOwner      :: Maybe WsUser
+    , wsaFormRec    :: Maybe WaFormRecord
+    , wsaServRec    :: Maybe ServRecord
+    , wsaTags       :: Maybe [WsTag]
+    , wsaComments   :: Maybe [Comment]
+    , wsaCreateDate :: Maybe UTCTime
+    , wsaCreatedBy  :: Maybe WsUser
+    , wsaUpdateDate :: Maybe UTCTime
+    , wsaUpdateBy   :: Maybe WsUser
     } deriving Show
 
 -- | Proxy information
@@ -232,3 +241,43 @@ data WasScanInfo = WasScanInfo
 data WaConfig = CancelAfterN Int
               | CancelScanAt Text
               deriving Show
+
+data WaFormRecord = WaFormRecord
+    { wafrType      :: Maybe Text
+    , wafrSslOnly   :: Maybe Bool
+    , wafrSelScript :: Maybe SelScript
+    , wafrFields    :: Maybe [WfrField]
+    } deriving Show
+
+data WfrField = WfrField
+    { frId      :: Int
+    , frName    :: Maybe Text
+    , frSecured :: Maybe Bool
+    , frValue   :: Maybe Text
+    } deriving Show
+
+data SelScript = SelScript
+    { ssName  :: Maybe Text
+    , ssData  :: Maybe Text
+    , ssRegex :: Maybe Text
+    } deriving Show
+
+data ServRecord = ServRecord
+    { srSslOnly :: Maybe Bool
+    , srCert    :: Maybe Certificate
+    , srFields  :: Maybe [SrField]
+    } deriving Show
+
+data SrField = SrField
+    { srfId     :: Int
+    , srfType   :: Maybe Text
+    , srfDomain :: Maybe Text
+    , srfUser   :: Maybe Text
+    , srfPass   :: Maybe Text
+    } deriving Show
+
+data Certificate = Certificate
+    { ctName       :: Maybe Text
+    , ctContents   :: Maybe Text
+    , ctPassphrase :: Maybe Text
+    } deriving Show

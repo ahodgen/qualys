@@ -1,8 +1,13 @@
+-- | In order to reflect the Qualys API documentation closely, options are
+-- handled differently depending on the API called. To determine which type
+-- of options to construct, take a look at the function called:
+--
+-- * If the function takes an argument of ['Param'] then V2 options are needed.
+-- * If the function takes an argument of 'V3Options' then V3 options are
+--   needed.
+
 module Qualys.Cookbook.Options
     (
-    -- * General
-    -- $general
-
     -- * V2 Options
     -- $v2opts
 
@@ -13,16 +18,6 @@ module Qualys.Cookbook.Options
     -- ** Preferences
     -- blah blah
     ) where
-
--- $general
---
--- In order to reflect the Qualys API documentation closely, options are
--- handled differently depending on the API called. To determine which type
--- of options to construct, take a look at the function called:
---
--- * If the function takes an argument of ['Param'] then V2 options are needed.
--- * If the function takes an argument of 'V3Options' then V3 options are
---   needed.
 
 -- $v2opts
 --
