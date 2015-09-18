@@ -17,6 +17,7 @@ import           Text.XML.Stream.Parse
 
 import           Qualys.Internal
 import           Qualys.Internal.ParseWasCommon
+import           Qualys.Internal.ParseWasAuthRec
 import           Qualys.Types.Was
 
 parseWasScans :: (MonadIO m, MonadThrow m) => ConduitM Event o m [WasScan]
@@ -52,7 +53,7 @@ parseTarget = tagNoAttr "target" $ WsTarget
     <$> parseWebApps
     <*> parseV3List "tags" parseTag
     <*> requireWith Just parseWebApp
-    <*> tagNoAttr "webAppAuthRecord" parseAuthRec
+    <*> parseAuthRec
     <*> tagNoAttr "scannerAppliance" parseScanAppl
     <*> tagNoAttr "cancelOption" content
     <*> tagNoAttr "proxy" parseProxy

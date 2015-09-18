@@ -5,12 +5,6 @@ module Qualys.Cookbook.KnowledgeBase (
 
 -- $exampleOption2
 
--- * Running a function for each entry
-
--- $exampleEach1
-
--- * Working with a bunch of entries
-
 ) where
 
 -- $exampleOption1
@@ -21,10 +15,8 @@ module Qualys.Cookbook.KnowledgeBase (
 --  @
 --  {-\# LANGUAGE OverloadedStrings \#-}
 --  import Control.Monad.IO.Class (liftIO)
---  import Data.Time.Clock (getCurrentTime, addUTCTime)
+--  import Data.Time(getCurrentTime, addUTCTime)
 --  import Qualys
---  import Qualys.Core
---  import Qualys.KnowledgeBase
 --
 --  myConf :: QualysConf
 --  myConf = QualysConf
@@ -37,8 +29,8 @@ module Qualys.Cookbook.KnowledgeBase (
 --  main :: IO ()
 --  main = do
 --      now <- getCurrentTime
---      let opts = [ KboModAfter (twodaysago now)
---                 , kboDetail \"All\"
+--      let opts = [ kboModAfter (twodaysago now)
+--                 , kboDetail (\"All\" :: String)
 --                 ]
 --      runQualysT myConf $ runKnowledgeBase opts (liftIO . print)
 --    where
@@ -49,86 +41,27 @@ module Qualys.Cookbook.KnowledgeBase (
 --
 -- Print entries published between two and four days ago.
 --
---  @
---  {-\# LANGUAGE OverloadedStrings \#-}
---  import Control.Monad.IO.Class (liftIO)
---  import Data.Time.Clock (getCurrentTime, addUTCTime)
---  import Qualys
---  import Qualys.Core
---  import Qualys.KnowledgeBase
---
---  myConf :: QualysConf
---  myConf = QualysConf
---      { qcPlatform = qualysUSPlatform2
---      , qcUsername = \"myuser\"
---      , qcPassword = \"mypass\"
---      , qcTimeOut  = 600 -- 10 Minutes
---      }
---
---  main :: IO ()
---  main = do
---      now <- getCurrentTime
---      let opts = [ kboPubAfter  (daysago 4 now)
---                 , kboPubBefore (daysago 2 now)
---                 ]
---      runQualysT myConf $ runKnowledgeBase opts (liftIO . print)
---     where
---       daysago x = addUTCTime $ x * (-86400)
 -- @
-
--- $exampleEach1
+-- {-\# LANGUAGE OverloadedStrings \#-}
+-- import Control.Monad.IO.Class (liftIO)
+-- import Data.Time (getCurrentTime, addUTCTime)
+-- import Qualys
 --
--- This type of workflow will use less memory than working with bulk
--- entries.
+-- myConf :: QualysConf
+-- myConf = QualysConf
+--     { qcPlatform = qualysUSPlatform2
+--     , qcUsername = \"myuser\"
+--     , qcPassword = \"mypass\"
+--     , qcTimeOut  = 600 -- 10 Minutes
+--     }
 --
--- Put vulnerabilities and CVEs into a database via ODBC for entries that have
--- been modified in the last day.
---
---  @
---  import Data.Time.Clock (getCurrentTime, addUTCTime)
---  import qualified Database.HDBC      as DB
---  import qualified Database.HDBC.ODBC as DB
---  import Qualys
---
---  data DbHolder = DbHolder
---      { dbConn   :: DB.Connection
---      , vulnStmt :: DB.Statement
---      , cveStmt  :: DB.Statement
---      }
---
---  dbStart :: IO DbHolder
---  dbStart = do
---      conn <- DB.connectODBC "DSC=vulns;UID=me;PWD=metoo"
---      vst  <- DB.prepare conn "INSERT INTO vuln (QID, Severity) VALUES (?,?)"
---      cst  <- DB.prepare conn "INSERT INTO cve (QID, CVEID) VALUE (?,?)"
---      return $ DbHolder
---          { dbConn   = conn
---          , vulnStmt = vst
---          , cveStmt  = cst
---          }
---
---  dbEnd :: DbHolder -> IO ()
---  dbEnd = do
---      DB.commit     $ dbConn c
---      DB.disconnect $ dbConn c
---
---  dbWrite :: DbHolder -> Vulnerability -> IO ()
---  dbWrite c v = do
---      DB.execute (vulnStmt c) [qkbQid v, qkbSev v]
---      mapM_ execCve $ qkbCve v
+-- main :: IO ()
+-- main = do
+--     now <- getCurrentTime
+--     let opts = [ kboPubAfter  (daysago 4 now)
+--                , kboPubBefore (daysago 2 now)
+--                ]
+--     runQualysT myConf $ runKnowledgeBase opts (liftIO . print)
 --    where
---      execCve x =
---
---  main :: IO ()
---  main = do
---      now <- getCurrentTime
---      let opts = kbDefaultOpts
---              { qkbTime   = Just [ QkbModAfter (onedayago now) ]
---              , qkbDetail = Just All
---              }
---      dbh <- startDb
---      runQualysT opts $ runQualysKb $ dbWrite dbh
---      dbEnd dbh
---    where
---      onedayago = addUTCTime . realToFrac (-86400)
---  @
+--      daysago x = addUTCTime $ x * (-86400)
+-- @

@@ -17,6 +17,7 @@ import           Text.XML.Stream.Parse
 
 import           Qualys.Internal
 import           Qualys.Internal.ParseWasCommon
+import           Qualys.Internal.ParseWasAuthRec
 import           Qualys.Types.Was
 
 parseWebApps :: (MonadIO m, MonadThrow m) => ConduitM Event o m [WebApp]
@@ -41,7 +42,7 @@ parseWebApp = tagName "WebApp" ignoreAttrs $ \_ -> WebApp
     <*> parseV3List "urlBlacklist" parseUrlEntry
     <*> parseV3List "urlWhitelist" parseUrlEntry
     <*> parseV3List "postDataBlacklist" parseUrlEntry
-    <*> parseV3List "authRecords" (tagNoAttr "WebAppAuthRecord" parseAuthRec)
+    <*> parseV3List "authRecords" parseAuthRec
     <*> tagNoAttr "useRobots" content
     <*> optionalWith parseBool (tagNoAttr "useSitemap" content)
     <*> parseV3List "headers" (tagNoAttr "WebAppHeader" content)
@@ -77,12 +78,6 @@ parseWebApp = tagName "WebApp" ignoreAttrs $ \_ -> WebApp
     parseWasScanInfo = tagNoAttr "lastScan" $ WasScanInfo
         <$> requireWith parseUInt (tagNoAttr "id" content)
         <*> tagNoAttr "name" content
-
-parseComment :: (MonadThrow m, MonadIO m) => ConduitM Event o m Comment
-parseComment = Comment
-    <$> requireTagNoAttr "contents" content
-    <*> tagNoAttr "author" parseUser
-    <*> optionalWith parseDate (tagNoAttr "createdDate" content)
 
 parseConfig :: (MonadThrow m, MonadIO m) => ConduitM Event o m (Maybe WaConfig)
 parseConfig = do
