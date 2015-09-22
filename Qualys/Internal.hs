@@ -166,7 +166,7 @@ requireWith :: Show a => (a -> Maybe b) -> ConduitM Event o m (Maybe a) ->
                ConduitM Event o m b
 requireWith p i = do
     x <- i
-    case join $ fmap p x of
+    case join (fmap p x) of
         Nothing -> fail $ "Bad value '" <> show x <> "'"
         Just y  -> return y
 

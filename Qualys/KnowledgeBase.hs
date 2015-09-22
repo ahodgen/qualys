@@ -233,7 +233,7 @@ parseVulns :: (Monoid a, MonadThrow m) => (Vulnerability -> m a) ->
               ConduitM Event o m a
 parseVulns f = do
     x <- tagNoAttr "VULN_LIST" $ many (parseVuln f)
-    return . mconcat $ fromMaybe [] x
+    return . mconcat . fromMaybe [] $ x
 
 parseCvssScore :: Integral a => Text -> Maybe a
 parseCvssScore = parseBound 0 10
