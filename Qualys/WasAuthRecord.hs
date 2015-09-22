@@ -21,14 +21,14 @@ import           Qualys.Types.Was
 getWasAuthRecCount :: QualysT IO (Maybe Int)
 getWasAuthRecCount = do
     res <- processV3With "count/was/webappauthrecord" Nothing (return ())
-    return . v3rCount $ fst res
+    return . v3rCount . fst $ res
 
 runWasSearchAuthRec :: Maybe V3Options -> QualysT IO (Maybe [WsAuthRec])
 runWasSearchAuthRec opt = do
     res <- processV3With "search/was/webappauthrecord" opt parseAuthRecs
-    return $ snd res
+    return . snd $ res
 
 getWasAuthRecDetail :: Int -> QualysT IO (Maybe WsAuthRec)
 getWasAuthRecDetail x = do
     res <- processV3With ("get/was/webappauthrecord/" <> show x) Nothing parseAuthRec
-    return . join $ snd res
+    return . join . snd $ res

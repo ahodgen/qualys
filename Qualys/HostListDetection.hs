@@ -195,8 +195,7 @@ data Tag = Tag
 parseDoc :: (MonadThrow  m, Monoid a) => (Host -> m a) ->
             ConduitM Event o m (Maybe V2Resp, a)
 parseDoc tm =
-    requireTagNoAttr "HOST_LIST_VM_DETECTION_OUTPUT" $
-    parseResp tm
+    requireTagNoAttr "HOST_LIST_VM_DETECTION_OUTPUT" $ parseResp tm
 
 parseResp :: (MonadThrow m, Monoid a) => (Host -> m a) ->
              ConduitM Event o m (Maybe V2Resp, a)
@@ -209,7 +208,7 @@ parseResp tm = requireTagNoAttr "RESPONSE" $ do
 parseHosts :: (MonadThrow m, Monoid a) => (Host -> m a) -> ConduitM Event o m a
 parseHosts tm = do
     x <- tagNoAttr "HOST_LIST" $ many (parseHost tm)
-    return $ mconcat $ fromMaybe [] x
+    return . mconcat . fromMaybe [] $ x
 
 -- | Parse host record and apply it to f
 parseHost :: MonadThrow  m => (Host -> m a) -> ConduitM Event o m (Maybe a)
@@ -267,7 +266,7 @@ getPage :: (Monoid a, MonadIO m, MonadThrow m) =>
 getPage _ Nothing = return (Nothing, mempty)
 getPage f (Just uri) = do
     res <- fetchV2Get uri
-    liftIO $ print res
+    liftIO . print $ res
     parseLBS def (responseBody res) $$ parseDoc f
 
 -- | Keep requesting records until we've processed everything, or failed.
@@ -280,13 +279,13 @@ runHld f uri = do
         Just r  -> case v2rCode r of
                     Just "1980" -> do
                         ys <- runHld f (T.unpack <$> v2rUrl r)
-                        return $ ys <> xs
+                        return (ys <> xs)
                     _           -> do
-                        liftIO . print $ v2rMsg r
+                        liftIO . print . v2rMsg $ r
                         return xs
 
 paramsToQuery :: [Param] -> String
-paramsToQuery xs = B8.unpack . renderQuery True . fmap p2q $ uniqueParams xs
+paramsToQuery xs = B8.unpack . renderQuery True . fmap p2q . uniqueParams $ xs
   where
     p2q (a,b) = (a,Just b)
 
