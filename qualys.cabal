@@ -23,6 +23,7 @@ library
     Qualys.HostListDetection
     Qualys.Internal
     Qualys.KnowledgeBase
+    Qualys.Report
     Qualys.WasScan
     Qualys.V2api
     Qualys.V3api
