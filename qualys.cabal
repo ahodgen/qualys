@@ -27,6 +27,7 @@ library
     Qualys.WasScan
     Qualys.V2api
     Qualys.V3api
+    Qualys.Scan
   Build-Depends:      base
                     , base64-bytestring
                     , bytestring
