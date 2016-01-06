@@ -27,6 +27,7 @@ module Qualys.HostListDetection
     , hldoExclSearchListTitles
     , hldoInclSearchListIds
     , hldoExclSearchListIds
+    , hldoTruncLimit
     -- * Types
     , Host (..)
     , Detection (..)
@@ -151,6 +152,10 @@ hldoInclSearchListIds xs = ("include_search_list_ids"
 hldoExclSearchListIds :: (Integral a, Show a) => [a] -> Param
 hldoExclSearchListIds xs = ("exclude_search_list_ids"
                            , toOptList toOptInt xs)
+
+-- | How many result to return per request (default is 1000)
+hldoTruncLimit :: (Integral a, Show a) => a -> Param
+hldoTruncLimit x = ("truncation_limit", toOptInt x)
 
 data Host = Host
     { hldId        :: Text          -- ^ Host ID assigned by Qualys
