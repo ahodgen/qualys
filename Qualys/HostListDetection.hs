@@ -46,7 +46,7 @@ import           Data.Monoid ((<>), Monoid (..))
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Traversable (mapM)
-import           Data.Time.Clock (UTCTime)
+import           Data.Time (UTCTime, getCurrentTime)
 import           Data.XML.Types
 import           Network.HTTP.Client
 import           Network.HTTP.Types (renderQuery)
@@ -270,8 +270,11 @@ getPage :: (Monoid a, MonadIO m, MonadThrow m) =>
            QualysT m (Maybe V2Resp, a)
 getPage _ Nothing = return (Nothing, mempty)
 getPage f (Just uri) = do
+    now <- liftIO getCurrentTime
+    liftIO . putStrLn $ show now <> " " <> uri
     res <- fetchV2Get uri
-    liftIO . print $ res
+    now' <- liftIO getCurrentTime
+    liftIO . putStrLn $ show now' <> " DONE FETCH"
     parseLBS def (responseBody res) $$ parseDoc f
 
 -- | Keep requesting records until we've processed everything, or failed.
