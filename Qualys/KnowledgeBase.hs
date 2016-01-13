@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, DeriveDataTypeable #-}
 -- | For practical examples see "Qualys.Cookbook.KnowledgeBase".
 module Qualys.KnowledgeBase
     (
@@ -48,6 +48,7 @@ import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Time.Clock (UTCTime)
 import           Data.Traversable (mapM)
+import           Data.Typeable
 import           Data.XML.Types
 import           Network.HTTP.Client
 import           Network.HTTP.Types (renderQuery)
@@ -162,7 +163,7 @@ data Software = Software
 data VendRef = VendRef
     { vrId  :: Text
     , vrUrl :: Text
-    } deriving (Show, Eq)
+    } deriving (Show, Eq, Typeable)
 
 data Compliance = Compliance
     { cmpType    :: Text -- ^ Type of compliance (e.g. HIPAA, SOX)

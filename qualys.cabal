@@ -22,8 +22,13 @@ library
     Qualys.Cookbook.WasWebApp
     Qualys.HostListDetection
     Qualys.Internal
+    Qualys.Internal.ParseWasAuthRec
+    Qualys.Internal.ParseWasCommon
+    Qualys.Internal.ParseWasScan
+    Qualys.Internal.ParseWebApp
     Qualys.KnowledgeBase
     Qualys.Report
+    Qualys.Types.Was
     Qualys.WasScan
     Qualys.V2api
     Qualys.V3api
