@@ -27,13 +27,14 @@ module Qualys.V3api
     ) where
 
 import           Control.Applicative
-import           Control.Monad.IO.Class () -- MonadIO, liftIO) 
+import           Control.Monad.IO.Class ()
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString.Lazy as BL
 import           Data.Conduit (($$), ConduitM)
 import qualified Data.Map as M
-import           Data.Monoid ((<>))
+import           Data.Maybe (fromMaybe)
+import           Data.Monoid ((<>), Monoid)
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Time.Clock (UTCTime)
@@ -88,6 +89,7 @@ data Operation = Equals
                | InList
                | Contains
                | None
+               deriving Eq
 
 instance Show Operation where
     show Equals    = "EQUALS"
@@ -198,6 +200,25 @@ contains (CF lab) = Crit lab Contains
 none :: CritField () -> Criteria
 none (CF lab) = Crit lab None ""
 
+-- | Paging
+v3NextPage :: Maybe V3Options -> V3Resp -> Maybe V3Options
+v3NextPage mopt resp =
+    case v3rMoreRec resp of
+        Just True -> case v3rLastId resp of
+            Just x  -> Just $ addFilt x
+            Nothing -> mopt
+        _         -> mopt
+  where
+    -- Add a filter to get the next page
+    addFilt x = V3Options { filt = next x : rgt }
+    -- Get entries with ID greater than the returned min id
+    next x = (CF "id" :: CritField Int) `greater` x
+    -- Remove filter for "greater than id" so there is no conflict
+    rgt = filter gtId cr
+    gtId x = field x == "id" && oper x == Greater
+    -- Get the current filters, or [] if non-existent
+    cr  = filt $ fromMaybe (V3Options []) mopt
+
 -- | Base path for the V3 API.
 v3ApiPath :: String
 v3ApiPath = "/qps/rest/3.0/"
@@ -231,7 +252,7 @@ fetchV3 p opt = do
 
 -- | Given a path, options, and a function for parsing <data>,
 --   fetch and parse via the V3 API. 
-processV3With :: (MonadIO m, MonadThrow m)
+processV3With :: (MonadIO m, MonadThrow m, Monoid a)
               => String
               -> Maybe V3Options
               -> ConduitM Event Void (QualysT m) a
@@ -239,7 +260,12 @@ processV3With :: (MonadIO m, MonadThrow m)
 processV3With p opt f = do
     res <- fetchV3 p opt
     liftIO $ print res
-    parseLBS def (responseBody res) $$ parseSvcResp f
+    (r,x) <- parseLBS def (responseBody res) $$ parseSvcResp f
+    case v3rMoreRec r of
+        Just True -> do
+            (r',x') <- processV3With p (v3NextPage opt r) f
+            return (r', x <> x')
+        _         -> return (r,x)
 
 -- | Parse the base ServiceResponse, and pass the <data> section to 'f' for
 -- further parsing.
