@@ -5,6 +5,8 @@ import           Data.Text (Text)
 import qualified Data.ByteString as B
 import           Data.Time (UTCTime)
 
+import           Qualys.Internal
+
 -- | Was scan
 data WasScan = WasScan
     { wsId          :: Int          -- ^ Scan ID
@@ -145,7 +147,7 @@ data WsNameStat = WsNameStat
 
 -- | Scan Result
 data WsScanResult = WsScanResult
-    { wsrQid     :: Int
+    { wsrQid     :: QID
     , wsrTitle   :: Text
     , wsrUri     :: Text
     , wsrParam   :: Maybe Text
@@ -168,7 +170,7 @@ data WsPayload = WsPayload
 
 -- | Information gathered
 data WsIg = WsIg
-    { wigQid   :: Int
+    { wigQid   :: QID
     , wigTitle :: Text
     , wigData  :: B.ByteString
     } deriving Show

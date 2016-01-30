@@ -18,8 +18,8 @@ module Qualys.Report
     ) where
 
 import           Control.Concurrent (threadDelay)
+import           Control.Monad.Catch (MonadThrow (..))
 import           Control.Monad.IO.Class (liftIO, MonadIO)
-import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Char8 as B8
 import           Data.Monoid
@@ -29,6 +29,7 @@ import           Text.XML
 import           Text.XML.Cursor
 
 import           Qualys.Internal
+import           Qualys.Log
 import           Qualys.V2api
 
 -- * Options for the Qualys Report API
@@ -99,14 +100,14 @@ launchFetchReport ps = do
   where
     act r x = case x of
         [] -> do
-            liftIO $ putStrLn "empty stat!"
+            qLog QLogWarn "statusReport: empty stat!"
             reDo r
         ["Finished"] -> return ()
         [e]          -> do
-            liftIO $ print e
+            qLog QLogWarn $ "statusReport: " <> e
             reDo r
         _            -> do
-            liftIO $ putStrLn "Multiple stats!"
+            qLog QLogWarn "statusReport: Multiple stats!"
             reDo r
     reDo r = do
         liftIO $ threadDelay (60*1000000)

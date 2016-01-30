@@ -24,8 +24,8 @@ module Qualys.Scan
     ) where
 
 import           Control.Applicative hiding (many)
+import           Control.Monad.Catch (MonadThrow (..))
 import           Control.Monad.IO.Class (MonadIO)
-import           Control.Monad.Trans.Resource (MonadThrow (..))
 import           Data.Conduit (($$), ConduitM)
 import           Data.Monoid ((<>))
 import           Data.Text (Text)

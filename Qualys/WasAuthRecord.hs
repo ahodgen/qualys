@@ -25,7 +25,7 @@ getWasAuthRecCount = do
 
 runWasSearchAuthRec :: Maybe V3Options -> QualysT IO (Maybe [WsAuthRec])
 runWasSearchAuthRec opt = do
-    res <- processV3With "search/was/webappauthrecord" opt parseAuthRecs
+    res <- processV3PageWith "search/was/webappauthrecord" opt parseAuthRecs
     return . snd $ res
 
 getWasAuthRecDetail :: Int -> QualysT IO (Maybe WsAuthRec)

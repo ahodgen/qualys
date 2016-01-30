@@ -18,9 +18,10 @@ module Qualys.Asset
     ) where
 
 import           Control.Applicative hiding (many)
+import           Control.Monad (join)
+import           Control.Monad.Catch (MonadThrow)
 import           Control.Monad.IO.Class (MonadIO)
-import           Control.Monad.Trans.Resource (MonadThrow)
-import           Data.Conduit (ConduitM, Consumer)
+import           Data.Conduit (ConduitM)
 import           Data.Text (Text)
 import           Data.Time (UTCTime)
 import           Data.XML.Types
@@ -70,7 +71,7 @@ parseTags :: (MonadIO m, MonadThrow m) => ConduitM Event o m [Tag]
 parseTags = many parseTag
 
 parseTag :: (MonadIO m, MonadThrow m) => ConduitM Event o m (Maybe Tag)
-parseTag = tagName "Tag" $ Tag
+parseTag = tagNoAttr "Tag" $ Tag
     <$> requireWith parseUInt (tagNoAttr "id" content)
     <*> tagNoAttr "name" content
     <*> optionalWith parseDate (tagNoAttr "created" content)
@@ -78,18 +79,18 @@ parseTag = tagName "Tag" $ Tag
     <*> tagNoAttr "color" content
     <*> tagNoAttr "ruleText" content
     <*> tagNoAttr "ruleType" content
-    <*> (tagNoAttr "children" $ tagNoAttr "list" $ parseChildren)
+    <*> (join <$> tagNoAttr "children" (tagNoAttr "list" parseChildren))
 
 parseChildren :: (MonadIO m, MonadThrow m) => ConduitM Event o m [SimpleTag]
 parseChildren = many parseChild
 
 parseChild :: (MonadIO m, MonadThrow m) => ConduitM Event o m (Maybe SimpleTag)
-parseChild = tagName "SimpleTag" $ SimpleTag
+parseChild = tagNoAttr "SimpleTag" $ SimpleTag
     <$> requireWith parseUInt (tagNoAttr "id" content)
     <*> tagNoAttr "name" content
 
 runSearchTags :: Maybe V3Options -> QualysT IO (Maybe [Tag])
 runSearchTags opt = do
-    res <- processV3With "search/am/tag" opt parseTags
+    res <- processV3PageWith "search/am/tag" opt parseTags
     return $ snd res
 

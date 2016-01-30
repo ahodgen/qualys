@@ -27,8 +27,9 @@ module Qualys.V2api
 import           Control.Applicative
 import           Control.Concurrent (threadDelay)
 import           Control.Exception (handle, throwIO)
+import           Control.Monad.Catch (MonadThrow (..))
 import           Control.Monad.Reader
-import           Control.Monad.Trans.Resource (MonadThrow (..))
+import           Control.Retry
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.ByteString.Lazy as BL
@@ -36,6 +37,7 @@ import           Data.Conduit (ConduitM)
 import qualified Data.Map as M
 import           Data.Monoid
 import           Data.Text (Text)
+import qualified Data.Text as T
 import           Data.Text.Encoding (encodeUtf8)
 import           Data.Time.Calendar (Day)
 import           Data.Time.Clock (UTCTime)
@@ -118,13 +120,14 @@ buildV2ApiUrl x = do
     return $ "https://" <> qualPlatform sess <> v2ApiPath <> x
 
 -- | Calculate the amount of time to delay if we are rate-limited.
-rateLimitDelay :: ResponseHeaders -> IO Int
-rateLimitDelay xs =
+rateLimitDelay :: QualysSess -> ResponseHeaders -> IO Int
+rateLimitDelay sess xs =
     case rlExceed <|> (clExcDelay =<< clExceed) of
         Nothing -> do
-            putStrLn "Qualys blocked (409 Conflict) for an unknown reason."
-            putStrLn "Headers follow. Retrying in 60 seconds."
-            print xs
+            qualLogger sess QLogError $
+                "Qualys blocked (409 Conflict) for an unknown reason.\n" <>
+                "Headers follow. Retrying in 60 seconds.\n" <>
+                T.pack (show xs)
             return 60
         Just z -> return z
   where
@@ -144,8 +147,9 @@ rateLimit :: Request -> QualysSess -> IO (Response BL.ByteString)
 rateLimit req sess = handle rlErr $ httpLbs req (qManager sess)
   where
     rlErr (StatusCodeException (Status 409 _) hs _) = do
-        rld <- rateLimitDelay hs
-        print $ "DELAY " <> show rld <> " seconds."
+        rld <- rateLimitDelay sess hs
+        qualLogger sess QLogWarn $
+            "Rate-limit delay: " <> T.pack (show rld) <> " seconds."
         threadDelay (rld*1000000)
         rateLimit req sess
     rlErr x = throwIO x
@@ -163,7 +167,7 @@ fetchV2 p params = do
                    }
     let req'' = urlEncodedBody params $
                 applyBasicAuth (qualUser sess) (qualPass sess) req'
-    liftIO $ rateLimit req'' sess
+    liftIO . recoverAll def $ \_ -> rateLimit req'' sess
 
 -- | Get a Qualys V2 API response given a full URL.
 fetchV2Get :: MonadIO m => String -> QualysT m (Response BL.ByteString)
@@ -175,4 +179,4 @@ fetchV2Get url = do
                    , responseTimeout = Just (1000000 * qualTimeout sess)
                    }
     let req'' = applyBasicAuth (qualUser sess) (qualPass sess) req'
-    liftIO $ rateLimit req'' sess
+    liftIO . recoverAll def $ \_ -> rateLimit req'' sess

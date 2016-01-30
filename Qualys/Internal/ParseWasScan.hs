@@ -5,8 +5,8 @@ module Qualys.Internal.ParseWasScan
     ) where
 
 import           Control.Applicative hiding (many)
+import           Control.Monad.Catch (MonadThrow)
 import           Control.Monad.IO.Class (MonadIO)
-import           Control.Monad.Trans.Resource (MonadThrow)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as B64
 import           Data.Conduit (ConduitM, Consumer)
@@ -177,7 +177,7 @@ parseScanResult :: (MonadIO m, MonadThrow m)
                 -> ConduitM Event o m (Maybe [WsInstance])
                 -> ConduitM Event o m (Maybe WsScanResult)
 parseScanResult x fi = tagNoAttr x $ WsScanResult
-        <$> requireWith parseUInt (tagNoAttr "qid" content)
+        <$> (QID <$> requireWith parseUInt (tagNoAttr "qid" content))
         <*> requireTagNoAttr "title" content
         <*> requireTagNoAttr "uri" content
         <*> tagNoAttr "param" content
@@ -215,7 +215,7 @@ parseScanIgs = parseV3List "igs" parseIg
   where
     parseIg :: (MonadIO m, MonadThrow m) => ConduitM Event o m (Maybe WsIg)
     parseIg = tagNoAttr "WasScanIg" $ WsIg
-        <$> requireWith parseUInt (tagNoAttr "qid" content)
+        <$> (QID <$> requireWith parseUInt (tagNoAttr "qid" content))
         <*> requireTagNoAttr "title" content
         <*> requireBase64 "data"
 

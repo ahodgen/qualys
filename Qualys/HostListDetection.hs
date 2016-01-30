@@ -36,9 +36,9 @@ module Qualys.HostListDetection
 
 import           Prelude hiding (mapM)
 import           Control.Applicative hiding (many)
+import           Control.Monad.Catch (MonadThrow)
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.Resource (MonadThrow)
 import qualified Data.ByteString.Char8 as B8
 import           Data.Conduit (($$), ConduitM)
 import           Data.Maybe (fromMaybe)
@@ -53,6 +53,7 @@ import           Network.HTTP.Types (renderQuery)
 import           Text.XML.Stream.Parse
 
 import           Qualys.Internal
+import           Qualys.Log
 import           Qualys.V2api
 
 -- * Options for the Qualys Host List Detection API
@@ -173,7 +174,7 @@ data Host = Host
     } deriving (Show, Eq)
 
 data Detection = Detection
-    { dQid      :: Text          -- ^ QID (Qualys ID) for this vuln
+    { dQid      :: QID           -- ^ QID (Qualys ID) for this vuln
     , dType     :: Text          -- ^ Type of vuln (Confirmed, Potential, Info)
     , dSev      :: Maybe Int     -- ^ Severity
     , dPort     :: Maybe Int     -- ^ Port this vuln was detected on
@@ -249,7 +250,7 @@ parseDetections = tagNoAttr "DETECTION_LIST" $ many parseDetection
 -- | Parse detections (i.e. vulnerabilities found)
 parseDetection :: MonadThrow m => ConduitM Event o m (Maybe Detection)
 parseDetection = tagNoAttr "DETECTION" $ Detection
-    <$> requireTagNoAttr "QID" content
+    <$> (QID <$> requireWith parseUInt (tagNoAttr "QID" content))
     <*> requireTagNoAttr "TYPE" content
     <*> optionalWith parseUInt (tagNoAttr "SEVERITY" content)
     <*> optionalWith parseUInt (tagNoAttr "PORT" content)
@@ -271,14 +272,14 @@ getPage :: (Monoid a, MonadIO m, MonadThrow m) =>
 getPage _ Nothing = return (Nothing, mempty)
 getPage f (Just uri) = do
     now <- liftIO getCurrentTime
-    liftIO . putStrLn $ show now <> " " <> uri
+    qLog QLogDebug . T.pack $ show now <> " " <> uri
     res <- fetchV2Get uri
     now' <- liftIO getCurrentTime
-    liftIO . putStrLn $ show now' <> " DONE FETCH"
+    qLog QLogDebug . T.pack $ show now' <> " DONE FETCH"
     parseLBS def (responseBody res) $$ parseDoc f
 
 -- | Keep requesting records until we've processed everything, or failed.
-runHld :: (MonadIO m, MonadThrow m, Monoid a) =>
+runHld :: (MonadIO m, Monoid a, MonadThrow m) =>
           (Host -> QualysT m a) -> Maybe String -> QualysT m a
 runHld f uri = do
     (ret,xs) <- getPage f uri
@@ -288,8 +289,10 @@ runHld f uri = do
                     Just "1980" -> do
                         ys <- runHld f (T.unpack <$> v2rUrl r)
                         return (ys <> xs)
-                    _           -> do
-                        liftIO . print . v2rMsg $ r
+                    cd          -> do
+                        qLog QLogError $
+                            "Error from Qualys - Code: " <> T.pack (show cd) <>
+                            " Message: " <> fromMaybe "" (v2rMsg r)
                         return xs
 
 paramsToQuery :: [Param] -> String

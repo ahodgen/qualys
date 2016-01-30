@@ -37,9 +37,9 @@ module Qualys.KnowledgeBase
 
 import           Prelude hiding (mapM)
 import           Control.Applicative hiding (many)
-import           Control.Monad.IO.Class (liftIO, MonadIO)
+import           Control.Monad.Catch (MonadThrow (..))
+import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString.Char8 as B8
 import           Data.Conduit (($$), ConduitM)
 import           Data.Maybe (fromMaybe)
@@ -55,6 +55,7 @@ import           Network.HTTP.Types (renderQuery)
 import           Text.XML.Stream.Parse
 
 import           Qualys.Internal
+import           Qualys.Log
 import           Qualys.V2api
 
 -- * Options for the Qualys KnowledgeBase
@@ -92,16 +93,16 @@ kboServiceModBefore :: OptValTime a => a -> Param
 kboServiceModBefore x = ("last_modified_by_service_before", toOptTm x)
 
 -- | Get QIDs greater to or equal this value
-kboIdMin :: (Integral a, Show a) => a -> Param
-kboIdMin x = ("id_min", toOptInt x)
+kboIdMin :: QID -> Param
+kboIdMin x = ("id_min", toOptInt $ unQID x)
 
 -- | Get QIDs less than or equal this value
-kboIdMax :: (Integral a, Show a) => a -> Param
-kboIdMax x = ("id_max", toOptInt x)
+kboIdMax :: QID -> Param
+kboIdMax x = ("id_max", toOptInt $ unQID x)
 
 -- | List of QIDs to retrieve
-kboIds :: (Integral a, Show a) => [a] -> Param
-kboIds xs  = ("ids", toOptList toOptInt xs)
+kboIds :: [QID] -> Param
+kboIds xs  = ("ids", toOptList (toOptInt . unQID) xs)
 
 -- | Detail level to Retrieve
 kboDetail :: OptValText a => a -> Param
@@ -128,7 +129,7 @@ kboIsPatchable x = ("show_pci_reasons", toOptBool x)
 -- | A vulnerability from the KnowledgeBase. Some fields may not populate
 --   depending on the options given and features in your Qualys subscription.
 data Vulnerability = Vuln
-    { kbQid      :: Int                -- ^ QID (Qualys ID) of the vulnerability
+    { kbQid      :: QID                -- ^ QID of the vulnerability
     , kbType     :: Text               -- ^ Type of vulnerability
     , kbSev      :: Int                -- ^ Severity
     , kbTitle    :: Text               -- ^ Name of the vulnerability
@@ -244,7 +245,7 @@ parseVuln :: (MonadThrow m) => (Vulnerability -> m a) ->
              ConduitM Event o m (Maybe a)
 parseVuln f = mapM (lift . f) =<<
     tagNoAttr "VULN" (Vuln
-        <$> requireWith parseUInt (tagNoAttr "QID" content)
+        <$> (QID <$> requireWith parseUInt (tagNoAttr "QID" content))
         <*> requireTagNoAttr "VULN_TYPE" content
         <*> requireWith parseSev (tagNoAttr "SEVERITY_LEVEL" content)
         <*> requireTagNoAttr "TITLE" content
@@ -406,8 +407,10 @@ runKb f uri = do
                     Just "1980" -> do
                         ys <- runKb f (T.unpack <$> v2rUrl r)
                         return $ ys <> xs
-                    _           -> do
-                        liftIO . print $ v2rMsg r
+                    cd          -> do
+                        qLog QLogError $
+                            "Error from Qualys - Code: " <> T.pack (show cd) <>
+                            " Message: " <> fromMaybe "" (v2rMsg r)
                         return xs
 
 paramsToQuery :: [Param] -> String

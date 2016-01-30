@@ -24,12 +24,13 @@ module Qualys.V3api
     , buildV3ApiUrl
     , fetchV3
     , processV3With
+    , processV3PageWith
     ) where
 
 import           Control.Applicative
+import           Control.Monad.Catch (MonadThrow (..))
 import           Control.Monad.IO.Class ()
 import           Control.Monad.Reader
-import           Control.Monad.Trans.Resource (MonadThrow (..))
 import qualified Data.ByteString.Lazy as BL
 import           Data.Conduit (($$), ConduitM)
 import qualified Data.Map as M
@@ -252,14 +253,24 @@ fetchV3 p opt = do
 
 -- | Given a path, options, and a function for parsing <data>,
 --   fetch and parse via the V3 API. 
-processV3With :: (MonadIO m, MonadThrow m, Monoid a)
+processV3With :: (MonadIO m, MonadThrow m)
               => String
               -> Maybe V3Options
               -> ConduitM Event Void (QualysT m) a
               -> QualysT m (V3Resp, Maybe a)
 processV3With p opt f = do
     res <- fetchV3 p opt
-    liftIO $ print res
+    parseLBS def (responseBody res) $$ parseSvcResp f
+
+-- | Given a path, options, and a function for parsing <data>,
+--   fetch and parse via the V3 API that may contain paged results
+processV3PageWith :: (MonadIO m, MonadThrow m, Monoid a)
+                  => String
+                  -> Maybe V3Options
+                  -> ConduitM Event Void (QualysT m) a
+                  -> QualysT m (V3Resp, Maybe a)
+processV3PageWith p opt f = do
+    res <- fetchV3 p opt
     (r,x) <- parseLBS def (responseBody res) $$ parseSvcResp f
     case v3rMoreRec r of
         Just True -> do

@@ -11,8 +11,8 @@ module Qualys.Internal.ParseWasCommon
 
 import           Control.Applicative hiding (many)
 import           Control.Monad (join)
+import           Control.Monad.Catch (MonadThrow)
 import           Control.Monad.IO.Class (MonadIO)
-import           Control.Monad.Trans.Resource (MonadThrow)
 import           Data.Conduit (ConduitM, Consumer)
 import           Data.XML.Types
 import           Text.XML.Stream.Parse

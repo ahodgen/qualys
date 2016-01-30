@@ -119,7 +119,7 @@ getWasScanCount = do
 -- | Search WAS scans
 runWasSearchScans :: Maybe V3Options -> QualysT IO (Maybe [WasScan])
 runWasSearchScans opt = do
-    res <- processV3With "search/was/wasscan" opt parseWasScans
+    res <- processV3PageWith "search/was/wasscan" opt parseWasScans
     return $ snd res
 
 -- | Retrieve scan details, given the scan ID.

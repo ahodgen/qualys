@@ -1,10 +1,15 @@
-{-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, RankNTypes #-}
+{-# LANGUAGE OverloadedStrings, GeneralizedNewtypeDeriving, RankNTypes,
+             DeriveDataTypeable #-}
 -- | Internal functions intended only to be used by this package. API stability
 --   not guaranteed!
 module Qualys.Internal
     (
       QualysT (..)
+    , QID (..)
     , liftReader
+    -- * Logging
+    , QLogLevel (..)
+    , Logger
     -- * Configuration
     , QualysConf (..)
     , QualysPlatform (..)
@@ -19,6 +24,8 @@ module Qualys.Internal
     , qualUser
     , qualPass
     , qualPlatform
+    , qualLogger
+    , qualRetries
     -- * Convenience functions for XML processing
     , parseBool
     , parseUInt
@@ -33,7 +40,7 @@ module Qualys.Internal
 
 import           Control.Applicative
 import           Control.Monad.Reader
-import           Control.Monad.Trans.Resource (MonadThrow (..))
+import           Control.Monad.Catch
 import qualified Data.ByteString as B
 import           Data.Conduit (ConduitM)
 import           Data.Monoid ((<>))
@@ -42,6 +49,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Read as T
 import           Data.Time.Clock  (UTCTime)
 import           Data.Time.Format (parseTime)
+import           Data.Typeable
 import           Data.XML.Types
 import           Network.HTTP.Client
 import           Network.HTTP.Types.Header (HeaderName)
@@ -58,13 +66,29 @@ instance MonadIO m => MonadIO (QualysT m) where
 instance MonadThrow m => MonadThrow (QualysT m) where
     throwM = lift . throwM
 
+instance MonadCatch m => MonadCatch (QualysT m) where
+    catch (QualysT x) handler = QualysT $ catch x (unQualysT . handler)
+
+instance MonadMask m => MonadMask (QualysT m) where
+    mask x = QualysT $ mask $ \y -> unQualysT $ x (QualysT . y . unQualysT)
+    uninterruptibleMask x = QualysT $ uninterruptibleMask $ \y -> unQualysT $ x (QualysT . y . unQualysT)
+
 instance MonadTrans QualysT where
   lift = QualysT . lift
+
+newtype QID = QID { unQID :: Int } deriving (Show, Eq, Ord, Typeable)
 
 -- | Lifts an action that works on @ReaderT@ to one that works on
 -- @QualysT@.
 liftReader :: Monad m => ReaderT QualysSess m a -> QualysT m a
 liftReader = QualysT
+
+type Logger m = QLogLevel -> Text -> m ()
+
+data QLogLevel = QLogDebug
+               | QLogWarn
+               | QLogError
+               deriving (Eq, Ord, Show)
 
 -- | Qualys Configuration
 data QualysConf = QualysConf
@@ -72,7 +96,9 @@ data QualysConf = QualysConf
     , qcUsername :: B.ByteString   -- ^ Qualys Username
     , qcPassword :: B.ByteString   -- ^ Qualys Password
     , qcTimeOut  :: Int            -- ^ Timeout (in seconds)
-    } deriving Show
+    , qcRetries  :: Int            -- ^ Number of retries
+    , qcLogger   :: forall m.(MonadIO m) => Logger m -- ^ Function to log
+    } -- deriving Show
 
 -- | Qualys platform to send requests to.
 newtype QualysPlatform = QualysPlatform { unQualysPlatform :: String }
@@ -123,6 +149,14 @@ qualPass = qcPassword . qConf
 -- | Grab the platform from a @QualysSess@.
 qualPlatform:: QualysSess -> String
 qualPlatform = unQualysPlatform . qcPlatform . qConf
+
+-- | Grab the logger from a @QualysSess@.
+qualLogger :: (MonadIO m) => QualysSess -> Logger m
+qualLogger = qcLogger . qConf
+
+-- | Get the number of retries from a @QualysSess@.
+qualRetries :: QualysSess -> Int
+qualRetries = qcRetries . qConf
 
 -- | Parse a text into a Bool.
 parseBool :: Text -> Maybe Bool

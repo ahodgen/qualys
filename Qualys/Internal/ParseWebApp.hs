@@ -6,8 +6,8 @@ module Qualys.Internal.ParseWebApp
 
 import           Control.Applicative hiding (many)
 import           Control.Monad (join)
+import           Control.Monad.Catch (MonadThrow)
 import           Control.Monad.IO.Class (MonadIO)
-import           Control.Monad.Trans.Resource (MonadThrow)
 import qualified Data.ByteString.Base64.URL as B64
 import           Data.Conduit (ConduitM)
 import           Data.Text (Text)

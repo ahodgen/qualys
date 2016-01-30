@@ -15,6 +15,7 @@ description:         Client for the QUalys API
 library
   Exposed-Modules:
     Qualys
+    Qualys.Asset
     Qualys.Cookbook
     Qualys.Cookbook.KnowledgeBase
     Qualys.Cookbook.HostListDetection
@@ -27,6 +28,7 @@ library
     Qualys.Internal.ParseWasScan
     Qualys.Internal.ParseWebApp
     Qualys.KnowledgeBase
+    Qualys.Log
     Qualys.Report
     Qualys.Types.Was
     Qualys.WasScan
@@ -39,6 +41,7 @@ library
                     , containers
                     , conduit
                     , data-default
+                    , exceptions
                     , failure
                     , http-client
                     , http-client-tls
@@ -46,7 +49,7 @@ library
                     , monad-control
                     , mtl
                     , old-locale
-                    , resourcet
+                    , retry             >= 0.7
                     , safe
                     , text
                     , time

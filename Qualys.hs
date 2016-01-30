@@ -38,8 +38,15 @@ module Qualys
       runQualysT
     -- * Types
     , QualysT
+    , QID (..)
+    -- * Logging
+    , Logger
+    , QLogLevel
+    , logDrop
+    , logFd
     -- * Configuration
     , QualysConf (..)
+    , defaultQualysConf
     -- ** Platform Configuation
     , QualysPlatform (..)
     , qualysUSPlatform1
@@ -60,13 +67,25 @@ import Network.HTTP.Client
 import Network.HTTP.Client.TLS
 
 import Qualys.Internal
+import Qualys.Log
 
 import Qualys.KnowledgeBase
 import Qualys.HostListDetection
 import Qualys.WasScan
 import Qualys.WasWebApp
 
--- | Given a 'QualysConf', run some action(s) against Qualys.
+-- | Default QualysConf
+defaultQualysConf :: QualysConf
+defaultQualysConf = QualysConf
+    { qcPlatform = qualysUSPlatform1
+    , qcUsername = ""
+    , qcPassword = ""
+    , qcTimeOut  = 300
+    , qcRetries  = 5
+    , qcLogger   = logStderr
+    }
+
+-- | Given a 'QualysConf' run some action(s) against Qualys.
 runQualysT :: MonadIO m => QualysConf -> QualysT m a -> m a
 runQualysT c f = do
     manager <- liftIO $ newManager tlsManagerSettings
