@@ -27,7 +27,7 @@ logDrop _ _ = return ()
 logFd :: MonadIO m => Handle -> Logger m
 logFd h l m = liftIO  $ T.hPutStr h logline
   where
-    logline = "[" <> T.pack (show l) <> "] " <> m
+    logline = "[" <> T.pack (show l) <> "] " <> m <> "\n"
 
 -- | Log messages to standard error
 logStderr :: MonadIO m => Logger m
@@ -41,4 +41,4 @@ qLog lvl mess = do
 
 -- | Logging outside of QualysT
 logRaw  :: MonadIO m => Logger m -> QLogLevel -> Text -> m ()
-logRaw lg lvl mess = lg lvl mess
+logRaw lg = lg
