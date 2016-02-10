@@ -50,6 +50,7 @@ import           System.Locale (defaultTimeLocale)
 import           Text.XML.Stream.Parse
 
 import          Qualys.Internal
+import          Qualys.Log
 
 -- | Qualys V2 Option
 type Param = (B.ByteString, B.ByteString)
@@ -167,7 +168,11 @@ fetchV2 p params = do
                    }
     let req'' = urlEncodedBody params $
                 applyBasicAuth (qualUser sess) (qualPass sess) req'
-    liftIO . recoverAll def $ \_ -> rateLimit req'' sess
+    qLog QLogDebug . T.pack $ "fetchV2: " <> url <> " params: " <>
+                              show params
+    res <- liftIO . recoverAll def $ \_ -> rateLimit req'' sess
+    qLog QLogDebug "DONE FETCH"
+    return res
 
 -- | Get a Qualys V2 API response given a full URL.
 fetchV2Get :: MonadIO m => String -> QualysT m (Response BL.ByteString)
@@ -179,4 +184,7 @@ fetchV2Get url = do
                    , responseTimeout = Just (1000000 * qualTimeout sess)
                    }
     let req'' = applyBasicAuth (qualUser sess) (qualPass sess) req'
-    liftIO . recoverAll def $ \_ -> rateLimit req'' sess
+    qLog QLogDebug . T.pack $ "fetchV2Get: " <> url
+    res <- liftIO . recoverAll def $ \_ -> rateLimit req'' sess
+    qLog QLogDebug "DONE FETCH"
+    return res

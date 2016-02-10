@@ -31,6 +31,7 @@ import           Control.Applicative
 import           Control.Monad.Catch (MonadThrow (..))
 import           Control.Monad.IO.Class ()
 import           Control.Monad.Reader
+import           Control.Retry
 import qualified Data.ByteString.Lazy as BL
 import           Data.Conduit (($$), ConduitM)
 import qualified Data.Map as M
@@ -48,6 +49,7 @@ import           Text.XML hiding (parseLBS)
 import           Text.XML.Stream.Parse
 
 import Qualys.Internal
+import Qualys.Log
 
 -- | V3 response from Qualys
 data V3Resp = V3Resp
@@ -68,7 +70,7 @@ data V3ErrDetail = V3ErrDetail
 -- | V3 API options
 data V3Options = V3Options
     { filt :: [Criteria] -- ^ Filters
-    }
+    } deriving Show
 
 -- | Criteria field. It contains the textual representation of the option
 -- and a phantom type @a@ to indicate what type of value it expects.
@@ -245,7 +247,11 @@ fetchV3 p opt = do
                    , requestBody = RequestBodyLBS (maybe "" v3OptXml opt)
                    }
     let req'' = applyBasicAuth (qualUser sess) (qualPass sess) req'
-    liftIO $ httpLbs req'' (qManager sess)
+    qLog QLogDebug . T.pack $ "fetchV3 (" <> show v3meth <> "): " <> url <>
+                              " opts: " <> show opt
+    res <- liftIO . recoverAll def . const $ httpLbs req'' (qManager sess)
+    qLog QLogDebug "DONE FETCH"
+    return res
   where
     v3meth = case opt of
                 Nothing -> "GET"

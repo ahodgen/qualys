@@ -37,7 +37,7 @@ module Qualys.HostListDetection
 import           Prelude hiding (mapM)
 import           Control.Applicative hiding (many)
 import           Control.Monad.Catch (MonadThrow)
-import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Trans.Class (lift)
 import qualified Data.ByteString.Char8 as B8
 import           Data.Conduit (($$), ConduitM)
@@ -46,7 +46,7 @@ import           Data.Monoid ((<>), Monoid (..))
 import           Data.Text (Text)
 import qualified Data.Text as T
 import           Data.Traversable (mapM)
-import           Data.Time (UTCTime, getCurrentTime)
+import           Data.Time (UTCTime)
 import           Data.XML.Types
 import           Network.HTTP.Client
 import           Network.HTTP.Types (renderQuery)
@@ -271,11 +271,7 @@ getPage :: (Monoid a, MonadIO m, MonadThrow m) =>
            QualysT m (Maybe V2Resp, a)
 getPage _ Nothing = return (Nothing, mempty)
 getPage f (Just uri) = do
-    now <- liftIO getCurrentTime
-    qLog QLogDebug . T.pack $ show now <> " " <> uri
     res <- fetchV2Get uri
-    now' <- liftIO getCurrentTime
-    qLog QLogDebug . T.pack $ show now' <> " DONE FETCH"
     parseLBS def (responseBody res) $$ parseDoc f
 
 -- | Keep requesting records until we've processed everything, or failed.
