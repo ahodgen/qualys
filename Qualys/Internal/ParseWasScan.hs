@@ -47,6 +47,7 @@ parseWasScan = tagName "WasScan" ignoreAttrs $ \_ -> WasScan
     <*> parseVulns
     <*> parseSensConts
     <*> parseScanIgs
+    <*> optionalWith parseBool (tagNoAttr "sendMail" content)
 
 parseTarget :: (MonadIO m, MonadThrow m) => ConduitM Event o m (Maybe WsTarget)
 parseTarget = tagNoAttr "target" $ WsTarget

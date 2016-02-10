@@ -31,6 +31,7 @@ data WasScan = WasScan
     , wsVulns       :: Maybe [WsScanResult]
     , wsSensCont    :: Maybe [WsScanResult]
     , wsIgs         :: Maybe [WsIg]
+    , wsSendMail    :: Maybe Bool
     } deriving Show
 
 -- | Was scan profile
