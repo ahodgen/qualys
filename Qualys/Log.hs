@@ -9,6 +9,7 @@ import           Data.Monoid ((<>))
 import           Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import           Data.Time (getCurrentTime)
 import           GHC.IO.Handle
 import           GHC.IO.Handle.FD
 
@@ -25,9 +26,13 @@ logDrop _ _ = return ()
 
 -- | Log messages to a file descriptor
 logFd :: MonadIO m => Handle -> Logger m
-logFd h l m = liftIO  $ T.hPutStr h logline
+logFd h l m = do
+    now <- liftIO getCurrentTime
+    liftIO  $ T.hPutStr h (logline now)
   where
-    logline = "[" <> T.pack (show l) <> "] " <> m <> "\n"
+    logline t = (T.pack . show) t <> " " <>
+                "[" <> (T.pack . show) l <> "] " <>
+                m <> "\n"
 
 -- | Log messages to standard error
 logStderr :: MonadIO m => Logger m
