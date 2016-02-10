@@ -44,6 +44,8 @@ module Qualys.WasScan
     ) where
 
 import           Control.Monad (join)
+import           Control.Monad.Catch (MonadThrow)
+import           Control.Monad.IO.Class (MonadIO)
 import           Data.Conduit (($$))
 import           Data.Monoid ((<>))
 import           Data.Text (Text)
@@ -111,31 +113,34 @@ wssFiltResultsStatus :: CritField Text
 wssFiltResultsStatus = CF "resultsStatus"
 
 -- | Get the number of scans in your account
-getWasScanCount :: QualysT IO (Maybe Int)
+getWasScanCount :: (MonadIO m, MonadThrow m) => QualysT m (Maybe Int)
 getWasScanCount = do
     res <- processV3With "count/was/wasscan" Nothing (return ())
     return $ v3rCount $ fst res
 
 -- | Search WAS scans
-runWasSearchScans :: Maybe V3Options -> QualysT IO (Maybe [WasScan])
+runWasSearchScans :: (MonadIO m, MonadThrow m) => Maybe V3Options ->
+                     QualysT m (Maybe [WasScan])
 runWasSearchScans opt = do
     res <- processV3PageWith "search/was/wasscan" opt parseWasScans
     return $ snd res
 
 -- | Retrieve scan details, given the scan ID.
-getWasScanDetail :: Int -> QualysT IO (Maybe WasScan)
+getWasScanDetail :: (MonadIO m, MonadThrow m) => Int ->
+                    QualysT m (Maybe WasScan)
 getWasScanDetail x = do
     res <- processV3With ("get/was/wasscan/" <> show x) Nothing parseWasScan
     return . join $ snd res
 
 -- | Given a scan ID return the status of the scan.
-getWasScanStatus :: Int -> QualysT IO (Maybe Text)
+getWasScanStatus :: (MonadIO m, MonadThrow m) => Int -> QualysT m (Maybe Text)
 getWasScanStatus x = do
     res <- processV3With ("status/was/wasscan/" <> show x) Nothing parseWasScan
     return $ wsStatus =<< (join . snd) res
 
 -- | Given a scan ID, retrieve the results of a scan.
-getWasScanResult :: Int -> QualysT IO (Maybe WasScan)
+getWasScanResult :: (MonadIO m, MonadThrow m) => Int ->
+                    QualysT m (Maybe WasScan)
 getWasScanResult x = do
     res <- fetchV3 ("download/was/wasscan/" <> show x) Nothing
     parseLBS def (responseBody res) $$ parseWasScan
