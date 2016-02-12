@@ -91,6 +91,6 @@ parseChild = tagNoAttr "SimpleTag" $ SimpleTag
 
 runSearchTags :: Maybe V3Options -> QualysT IO (Maybe [Tag])
 runSearchTags opt = do
-    res <- processV3PageWith "search/am/tag" opt parseTags
+    res <- processV3PageWith V3v20 "search/am/tag" opt parseTags
     return $ snd res
 

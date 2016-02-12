@@ -7,6 +7,7 @@ module Qualys.V3api
       V3Options (..)
     , V3Resp (..)
     , V3ErrDetail (..)
+    , V3Vers (..)
     , CritField (..)
       -- * Filter Operations
     , equals
@@ -224,22 +225,29 @@ v3NextPage mopt resp =
 
 -- | Base path for the V3 API.
 v3ApiPath :: String
-v3ApiPath = "/qps/rest/3.0/"
+v3ApiPath = "/qps/rest/"
+
+-- | Version of V3 API
+data V3Vers = V3v20 | V3v30
+
+instance Show V3Vers where
+    show V3v20 = "2.0"
+    show V3v30 = "3.0"
 
 -- | Build a V3 URL given a relative path under the base path.
-buildV3ApiUrl :: MonadIO m => String -> QualysT m String
-buildV3ApiUrl x = do
+buildV3ApiUrl :: MonadIO m => V3Vers -> String -> QualysT m String
+buildV3ApiUrl v x = do
     sess <- liftReader ask
-    return $ "https://" <> qualPlatform sess <> v3ApiPath <> x
+    return $ "https://" <> qualPlatform sess <> v3ApiPath <> show v <> "/" <> x
 
 -- | Given a relative path and options, send a request and return the
 -- response from Qualys.
-fetchV3 :: (MonadIO m, MonadThrow m) => String -> Maybe V3Options ->
+fetchV3 :: (MonadIO m, MonadThrow m) => V3Vers -> String -> Maybe V3Options ->
                         QualysT m (Response BL.ByteString)
 -- XXX: How is rate-limiting done in V3? Couldn't find documentation.
-fetchV3 p opt = do
+fetchV3 v p opt = do
     sess <- liftReader ask
-    url <- buildV3ApiUrl p
+    url <- buildV3ApiUrl v p
     req <- liftIO $ parseUrl url
     let req' = req { method = v3meth
                    , requestHeaders = qualysHeaders
@@ -260,27 +268,29 @@ fetchV3 p opt = do
 -- | Given a path, options, and a function for parsing <data>,
 --   fetch and parse via the V3 API. 
 processV3With :: (MonadIO m, MonadThrow m)
-              => String
+              => V3Vers
+              -> String
               -> Maybe V3Options
               -> ConduitM Event Void (QualysT m) a
               -> QualysT m (V3Resp, Maybe a)
-processV3With p opt f = do
-    res <- fetchV3 p opt
+processV3With v p opt f = do
+    res <- fetchV3 v p opt
     parseLBS def (responseBody res) $$ parseSvcResp f
 
 -- | Given a path, options, and a function for parsing <data>,
 --   fetch and parse via the V3 API that may contain paged results
 processV3PageWith :: (MonadIO m, MonadThrow m, Monoid a)
-                  => String
+                  => V3Vers
+                  -> String
                   -> Maybe V3Options
                   -> ConduitM Event Void (QualysT m) a
                   -> QualysT m (V3Resp, Maybe a)
-processV3PageWith p opt f = do
-    res <- fetchV3 p opt
+processV3PageWith v p opt f = do
+    res <- fetchV3 v p opt
     (r,x) <- parseLBS def (responseBody res) $$ parseSvcResp f
     case v3rMoreRec r of
         Just True -> do
-            (r',x') <- processV3With p (v3NextPage opt r) f
+            (r',x') <- processV3With v p (v3NextPage opt r) f
             return (r', x <> x')
         _         -> return (r,x)
 
@@ -288,15 +298,16 @@ processV3PageWith p opt f = do
 -- further parsing.
 parseSvcResp :: (MonadIO m, MonadThrow m) => ConduitM Event o m a ->
                         ConduitM Event o m (V3Resp, Maybe a)
-parseSvcResp f = force "Blah"$ tagName "ServiceResponse" ignoreAttrs $ \_ -> (,)
-    <$> (V3Resp
+parseSvcResp f = force "ServiceResponse"$
+    tagName "ServiceResponse" ignoreAttrs $ \_ -> (,)
+        <$> (V3Resp
             <$> requireTagNoAttr "responseCode" content
             <*> tagNoAttr "responseErrorDetails" parseErrDetail
             <*> optionalWith parseUInt (tagNoAttr "count" content)
             <*> optionalWith parseBool (tagNoAttr "hasMoreRecords" content)
             <*> optionalWith parseUInt (tagNoAttr "lastId" content)
-        )
-    <*> tagNoAttr "data" f
+            )
+        <*> tagNoAttr "data" f
 
 -- | Parse the error detail
 parseErrDetail :: (MonadIO m, MonadThrow m) => ConduitM Event o m V3ErrDetail

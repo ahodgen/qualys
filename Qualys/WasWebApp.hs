@@ -90,11 +90,11 @@ wasFiltLastScanStatus = CF "lastScan.status"
 --   in the subscription.
 searchWebApps :: Maybe V3Options -> QualysT IO (Maybe [WebApp])
 searchWebApps opt = do
-    res <- processV3PageWith "search/was/webapp" opt parseWebApps
+    res <- processV3PageWith V3v30 "search/was/webapp" opt parseWebApps
     return . snd $ res
 
 -- | Get details for a WebApp.
 getWebAppDetail ::  Int -> QualysT IO (Maybe WebApp)
 getWebAppDetail x = do
-    res <- processV3With ("get/was/webapp/" <> show x) Nothing parseWebApp
+    res <- processV3With V3v30 ("get/was/webapp/" <> show x) Nothing parseWebApp
     return . join . snd $ res
