@@ -257,7 +257,7 @@ fetchV3 v p opt = do
     let req'' = applyBasicAuth (qualUser sess) (qualPass sess) req'
     qLog QLogDebug . T.pack $ "fetchV3 (" <> show v3meth <> "): " <> url <>
                               " opts: " <> show opt
-    res <- liftIO . recoverAll def . const $ httpLbs req'' (qManager sess)
+    res <- liftIO . recoverAll (retryStrat sess) . const $ httpLbs req'' (qManager sess)
     qLog QLogDebug "DONE FETCH"
     return res
   where

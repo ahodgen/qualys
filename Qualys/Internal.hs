@@ -17,6 +17,7 @@ module Qualys.Internal
     , qualysUSPlatform2
     , qualysEUPlatform
     , qualysPrivateCloudPlatform
+    , retryStrat
     -- * Session data
     , QualysSess (..)
     , qualysHeaders
@@ -41,6 +42,7 @@ module Qualys.Internal
 import           Control.Applicative
 import           Control.Monad.Reader
 import           Control.Monad.Catch
+import           Control.Retry
 import qualified Data.ByteString as B
 import           Data.Conduit (ConduitM)
 import           Data.Monoid ((<>))
@@ -157,6 +159,10 @@ qualLogger = qcLogger . qConf
 -- | Get the number of retries from a @QualysSess@.
 qualRetries :: QualysSess -> Int
 qualRetries = qcRetries . qConf
+
+-- | Retry Strategy - 5 seconds with exponential backoff
+retryStrat :: Monad m => QualysSess -> RetryPolicyM m
+retryStrat sess = exponentialBackoff 5000000 <> limitRetries (qualRetries sess)
 
 -- | Parse a text into a Bool.
 parseBool :: Text -> Maybe Bool

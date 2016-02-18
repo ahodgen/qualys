@@ -91,6 +91,7 @@ statusReport (ReportId r) = do
               element "REPORT_LIST" =<< child =<<
               element "RESPONSE" =<< child (xml x)
 
+-- XXX: Config check interval, retries
 -- | Launch and fetch a report
 launchFetchReport :: (MonadIO m, MonadThrow m) => [Param] -> QualysT m B.ByteString
 launchFetchReport ps = do

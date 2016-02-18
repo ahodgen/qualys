@@ -170,7 +170,7 @@ fetchV2 p params = do
                 applyBasicAuth (qualUser sess) (qualPass sess) req'
     qLog QLogDebug . T.pack $ "fetchV2: " <> url <> " params: " <>
                               show params
-    res <- liftIO . recoverAll def $ \_ -> rateLimit req'' sess
+    res <- liftIO . recoverAll (retryStrat sess) $ \_ -> rateLimit req'' sess
     qLog QLogDebug "DONE FETCH"
     return res
 
@@ -185,6 +185,6 @@ fetchV2Get url = do
                    }
     let req'' = applyBasicAuth (qualUser sess) (qualPass sess) req'
     qLog QLogDebug . T.pack $ "fetchV2Get: " <> url
-    res <- liftIO . recoverAll def $ \_ -> rateLimit req'' sess
+    res <- liftIO . recoverAll (retryStrat sess) $ \_ -> rateLimit req'' sess
     qLog QLogDebug "DONE FETCH"
     return res
