@@ -16,8 +16,7 @@ import           GHC.IO.Handle.FD
 import           Qualys.Internal
 
 -- | Only log messages when predicate p is true
-logFilter :: MonadIO m => Logger m -> (QLogLevel -> Text -> Bool) ->
-                          QLogLevel -> Text -> m ()
+logFilter :: MonadIO m => Logger m -> (QLogLevel -> Text -> Bool) -> Logger m
 logFilter f p l m = when (p l m) $ f l m
 
 -- | Logger to drop logs
